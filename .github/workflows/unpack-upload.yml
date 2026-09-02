@@ -1,9 +1,70 @@
-name: Prepare ZIP import
+name: Unpack uploaded project
+
 on:
-  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/unpack-upload.yml"
+
+permissions:
+  contents: write
 
 jobs:
-  noop:
+  unpack:
     runs-on: ubuntu-latest
     steps:
-      - run: echo ready
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild and verify archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .tmp_import/part00 \
+            .tmp_import/part01 \
+            .tmp_import/part02 \
+            .tmp_import/part03 \
+            .tmp_import/part04 \
+            .tmp_import/part05 \
+            .tmp_import/part06 \
+            .tmp_import/part07 \
+            .tmp_import/part08 \
+            .tmp_import/part08_tail \
+            .tmp_import/part09 \
+            .tmp_import/part09_tail \
+            .tmp_import/part10 \
+            .tmp_import/part11 \
+            .tmp_import/part12 \
+            .tmp_import/part13 \
+            .tmp_import/part14 \
+            .tmp_import/part15 \
+            .tmp_import/part16 \
+            .tmp_import/part17 \
+            > /tmp/payload.b64
+          base64 -d /tmp/payload.b64 > /tmp/payload.tar.xz
+          echo "fa097c7de5f3923d373f6d176c7b56707cd4fe1d42a6f24c3dccfcf8cd650654  /tmp/payload.tar.xz" | sha256sum -c -
+
+      - name: Unpack project into repository root
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/unpack
+          tar -xJf /tmp/payload.tar.xz -C /tmp/unpack
+          test -d /tmp/unpack/PyQuest-main
+          rsync -a --delete --exclude='.git/' /tmp/unpack/PyQuest-main/ ./
+
+      - name: Commit imported project
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Import PyQuest from uploaded ZIP"
+          git push
