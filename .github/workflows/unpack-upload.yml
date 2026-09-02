@@ -1,5 +1,6 @@
 name: Unpack uploaded project
 
+# Second push activates the already-present push trigger.
 on:
   push:
     paths:
