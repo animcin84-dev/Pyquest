@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "The profile of a user in the Python Genesis app.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique ID of the user." },
+        "username": { "type": "string", "description": "The display name of the user." },
+        "xp": { "type": "integer", "description": "The experience points of the user." },
+        "level": { "type": "integer", "description": "The current level of the user." },
+        "role": { "type": "string", "description": "The role of the user (e.g., 'admin', 'user')." },
+        "avatar": { "type": "string", "description": "The URL of the user's avatar." },
+        "bio": { "type": "string", "description": "The user's biography." },
+        "coins": { "type": "integer", "description": "The number of coins the user has." },
+        "completedLessons": { "type": "array", "items": { "type": "string" }, "description": "A list of IDs of completed lessons." },
+        "inventory": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "itemId": { "type": "string" },
+              "name": { "type": "string" },
+              "acquiredAt": { "type": "number" }
+            }
+          },
+          "description": "The user's inventory." 
+        },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "logic": { "type": "integer" },
+            "speed": { "type": "integer" },
+            "power": { "type": "integer" },
+            "intellect": { "type": "integer" },
+            "stamina": { "type": "integer" }
+          }
+        },
+        "pet": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "level": { "type": "integer" },
+            "type": { "type": "string" },
+            "stats": {
+              "type": "object",
+              "properties": {
+                "logic": { "type": "integer" },
+                "speed": { "type": "integer" },
+                "power": { "type": "integer" },
+                "intellect": { "type": "integer" }
+              }
+            },
+            "lastFed": { "type": "number" },
+            "customPixels": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "completedDailyChallenges": { "type": "array", "items": { "type": "string" } },
+        "lastDailyChallengeDate": { "type": "string" }
+      },
+      "required": ["uid", "username", "xp", "level", "inventory", "stats"]
+    },
+    "MarketplaceListing": {
+      "title": "Marketplace Listing",
+      "description": "A listing of an item for sale in the marketplace.",
+      "type": "object",
+      "properties": {
+        "sellerId": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemName": { "type": "string" },
+        "price": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sellerId", "itemId", "price"]
+    },
+    "Trade": {
+      "title": "Trade Request",
+      "description": "A trade request between two users.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "senderItems": { "type": "array", "items": { "type": "string" } },
+        "receiverItems": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "receiverId", "senderItems", "receiverItems", "status"]
+    },
+    "Log": {
+      "title": "Admin Log",
+      "description": "A log of an admin action.",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string" },
+        "target": { "type": "string" },
+        "value": { "type": "string" },
+        "status": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "timestamp"]
+    },
+    "Snippet": {
+      "title": "Code Snippet",
+      "description": "Community shared code snippet",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "code": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "likes": { "type": "integer" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "code", "authorId", "authorName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "The profile of a user."
+    },
+    "/marketplace/{listingId}": {
+      "schema": "MarketplaceListing",
+      "description": "A listing in the marketplace."
+    },
+    "/trades/{tradeId}": {
+      "schema": "Trade",
+      "description": "A trade request."
+    },
+    "/logs/{logId}": {
+      "schema": "Log",
+      "description": "An admin log."
+    },
+    "/snippets/{snippetId}": {
+      "schema": "Snippet",
+      "description": "Community shared code snippets."
+    }
+  }
+}

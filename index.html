@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PyQuest - Освойте Python через приключения</title>
+    <meta name="description" content="PyQuest — интерактивная платформа для обучения программированию на Python с элементами RPG, ИИ-наставником и реальной практикой в браузере." />
+    <meta name="keywords" content="Python, обучение программированию, PyQuest, интерактивные уроки, ИИ наставник, песочница Python" />
+    
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="PyQuest - Освойте Python через приключения" />
+    <meta property="og:description" content="Станьте мастером Python с помощью ИИ-наставника и эпических квестов. Практикуйтесь прямо в браузере!" />
+    <meta property="og:image" content="/og-image.png" />
+
+    
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="PyQuest - Освойте Python через приключения" />
+    <meta property="twitter:description" content="Станьте мастером Python с помощью ИИ-наставника и эпических квестов." />
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+    <script>
+      // Fix for "Cannot set property fetch of #<Window> which has only a getter"
+      try {
+        const originalFetch = window.fetch;
+        Object.defineProperty(window, 'fetch', {
+          configurable: true,
+          enumerable: true,
+          get: () => originalFetch,
+          set: (v) => {
+            console.warn('Attempted to overwrite window.fetch with:', v);
+          }
+        });
+      } catch (e) {
+        console.error('Failed to make fetch configurable:', e);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
