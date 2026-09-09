@@ -4,7 +4,7 @@ import { Calendar, Zap, Trophy, Star, CheckCircle2, Timer, ArrowRight, Code2, Bu
 import { useAuth } from '../contexts/AuthContext';
 import { playSound } from '../utils/sounds';
 import { TextReveal } from '../components/TextReveal';
-import { generateDailyChallenge } from '../services/gemini';
+import { generateDailyChallenge, type DailyChallenge } from '../services/gemini';
 import { AIQuestService, AIQuest } from '../services/AIQuestService';
 import { CodeEditor } from '../components/CodeEditor';
 import { toast } from 'sonner';
@@ -86,7 +86,7 @@ export const DailyChallenges = () => {
   const handleGenerateAI = async () => {
     setIsGenerating(true);
     try {
-      const challenge = await generateDailyChallenge(userProfile?.level || 1);
+      const challenge: DailyChallenge = await generateDailyChallenge(userProfile?.level || 1);
       if (challenge) {
         setAiChallenge({
           ...challenge,
