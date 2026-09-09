@@ -7,64 +7,174 @@ import { fileURLToPath } from "url";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import "dotenv/config";
 
+type RoomType = "duel" | "sandbox";
+
+interface Room {
+  players: string[];
+  state: Record<string, unknown>;
+  type: RoomType;
+}
+
+interface MentorChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const readString = (value: unknown, maxLength: number): string | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length <= maxLength ? normalized : null;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === "object" && value !== null
+);
+
+const parseMentorMessages = (value: unknown): MentorChatMessage[] | null => {
+  if (!Array.isArray(value)) return null;
+
+  const messages = value.slice(-6).map((message): MentorChatMessage | null => {
+    if (!isRecord(message) || (message.role !== "user" && message.role !== "assistant")) return null;
+    const content = readString(message.content, 2000);
+    return content ? { role: message.role, content } : null;
+  });
+
+  return messages.every((message): message is MentorChatMessage => message !== null)
+    ? messages
+    : null;
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
+  const allowedOrigins = (process.env.CORS_ORIGINS || process.env.APP_URL || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   const io = new Server(httpServer, {
     cors: {
-      origin: "*",
+      origin: allowedOrigins.length > 0 ? allowedOrigins : true,
       methods: ["GET", "POST"]
     }
   });
 
   const PORT = Number(process.env.PORT) || 3000;
+  const HOST = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 
   
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
+  const model = geminiApiKey
+    ? new GoogleGenerativeAI(geminiApiKey).getGenerativeModel({ model: "gemini-1.5-flash" })
+    : null;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "64kb" }));
 
   
-  const rooms = new Map<string, { players: string[], state: any, type: 'duel' | 'sandbox' }>();
+  const rooms = new Map<string, Room>();
+  let waitingDuelSocketId: string | null = null;
 
   io.on("connection", (socket) => {
     console.log("A user connected:", socket.id);
 
-    socket.on("join_room", ({ roomId, type }) => {
+    socket.on("join_room", (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const roomId = readString(payload.roomId, 100);
+      const type = payload.type;
+      if (type !== 'sandbox' || !roomId) return;
       socket.join(roomId);
       if (!rooms.has(roomId)) {
         rooms.set(roomId, { players: [socket.id], state: {}, type });
       } else {
         const room = rooms.get(roomId)!;
-        if (room.type === 'duel' && room.players.length < 2) {
-          room.players.push(socket.id);
-          io.to(roomId).emit("duel_start", { players: room.players });
-        } else if (room.type === 'sandbox') {
+        if (room.type === 'sandbox' && !room.players.includes(socket.id)) {
           room.players.push(socket.id);
           io.to(roomId).emit("user_joined", { userId: socket.id, count: room.players.length });
         }
       }
     });
 
-    socket.on("code_update", ({ roomId, code }) => {
+    socket.on("find_duel", () => {
+      const waitingSocket = waitingDuelSocketId
+        ? io.sockets.sockets.get(waitingDuelSocketId)
+        : undefined;
+
+      if (!waitingSocket || waitingSocket.id === socket.id) {
+        waitingDuelSocketId = socket.id;
+        socket.emit("duel_waiting");
+        return;
+      }
+
+      const roomId = `duel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const players = [waitingSocket.id, socket.id];
+      waitingSocket.join(roomId);
+      socket.join(roomId);
+      rooms.set(roomId, { players, state: {}, type: 'duel' });
+      waitingDuelSocketId = null;
+
+      io.to(roomId).emit("duel_start", {
+        roomId,
+        players,
+        challengeIndex: Math.floor(Math.random() * 3)
+      });
+    });
+
+    socket.on("code_update", (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const roomId = readString(payload.roomId, 100);
+      const code = readString(payload.code, 20000);
+      if (!roomId || code === null) return;
+      const room = rooms.get(roomId);
+      if (!room || room.type !== 'duel' || !room.players.includes(socket.id)) return;
       socket.to(roomId).emit("opponent_code", code);
     });
 
-    socket.on("sandbox_update", ({ roomId, code, cursor }) => {
+    socket.on("sandbox_update", (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const roomId = readString(payload.roomId, 100);
+      const code = readString(payload.code, 20000);
+      const cursor = typeof payload.cursor === "number" && Number.isFinite(payload.cursor)
+        ? Math.max(0, Math.floor(payload.cursor))
+        : undefined;
+      if (!roomId || code === null) return;
+      const room = rooms.get(roomId);
+      if (!room || room.type !== 'sandbox' || !room.players.includes(socket.id)) return;
       socket.to(roomId).emit("remote_update", { code, cursor, userId: socket.id });
     });
 
-    socket.on("duel_action", ({ roomId, action }) => {
+    socket.on("duel_action", (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const roomId = readString(payload.roomId, 100);
+      const action = readString(payload.action, 40);
+      if (!roomId || !action) return;
+      const room = rooms.get(roomId);
+      if (!room || room.type !== 'duel' || !room.players.includes(socket.id)) return;
       io.to(roomId).emit("duel_event", { playerId: socket.id, action });
+      if (action === 'finish' || action === 'timeout') {
+        rooms.delete(roomId);
+      }
     });
 
     socket.on("disconnect", () => {
       console.log("User disconnected:", socket.id);
-      
+      if (waitingDuelSocketId === socket.id) {
+        waitingDuelSocketId = null;
+      }
+
+      for (const [roomId, room] of rooms) {
+        if (!room.players.includes(socket.id)) continue;
+        room.players = room.players.filter((playerId) => playerId !== socket.id);
+        if (room.type === 'duel') {
+          socket.to(roomId).emit("duel_event", { playerId: socket.id, action: 'opponent_left' });
+          rooms.delete(roomId);
+        } else if (room.players.length === 0) {
+          rooms.delete(roomId);
+        } else {
+          io.to(roomId).emit("user_left", { userId: socket.id, count: room.players.length });
+        }
+      }
     });
   });
 
@@ -75,7 +185,17 @@ async function startServer() {
 
   app.post("/api/mentor/hint", async (req, res) => {
     try {
-      const { code, challenge, error } = req.body;
+      const code = readString(req.body?.code, 20000);
+      const challenge = readString(req.body?.challenge, 2000);
+      const error = typeof req.body?.error === "string" ? req.body.error.slice(0, 2000) : "";
+      if (code === null || challenge === null) {
+        res.status(400).json({ error: "code and challenge must be valid strings" });
+        return;
+      }
+      if (!model) {
+        res.status(503).json({ error: "AI mentor is not configured" });
+        return;
+      }
       const prompt = `
         Ты — ИИ-Ментор по Python в обучающей игре PyQuest. 
         Ученик застрял на задаче: "${challenge}".
@@ -100,9 +220,53 @@ async function startServer() {
     }
   });
 
+  app.post("/api/mentor/chat", async (req, res) => {
+    try {
+      const messages = parseMentorMessages(req.body?.messages);
+      if (!messages || messages.length === 0) {
+        res.status(400).json({ error: "messages must contain up to six valid messages" });
+        return;
+      }
+      if (!model) {
+        res.status(503).json({ error: "AI mentor is not configured" });
+        return;
+      }
+
+      const username = readString(req.body?.profile?.username, 80) || "Ученик";
+      const level = typeof req.body?.profile?.level === "number" && Number.isFinite(req.body.profile.level)
+        ? Math.max(1, Math.min(100, Math.floor(req.body.profile.level)))
+        : 1;
+      const history = messages
+        .map((message) => `${message.role === "user" ? "Ученик" : "Наставник"}: ${message.content}`)
+        .join("\n");
+      const prompt = `Ты — ИИ-наставник в игровом приложении PyQuest для изучения Python.
+Помогай ученику понимать Python, давай подсказки, но не решай задачи за него полностью.
+Будь дружелюбным и используй игровой сленг (квесты, опыт, уровни).
+Информация об ученике: имя — ${username}, уровень — ${level}.
+
+История последних сообщений:
+${history}
+
+Ответь на последнее сообщение ученика.`;
+
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        systemInstruction: "Ты — мудрый и веселый наставник-программист. Используй Markdown для форматирования кода.",
+      });
+      res.json({ text: result.response.text() });
+    } catch (err) {
+      console.error("Gemini Chat Proxy Error:", err);
+      res.status(500).json({ error: "Failed to generate chat response" });
+    }
+  });
+
   app.post("/api/daily-challenge", async (req, res) => {
     try {
-      const { userLevel } = req.body;
+      const requestedLevel = Number(req.body?.userLevel);
+      const userLevel = Number.isFinite(requestedLevel)
+        ? Math.max(1, Math.min(100, Math.floor(requestedLevel)))
+        : 1;
+      if (!model) throw new Error("Gemini is not configured");
       const prompt = `
         Сгенерируй ежедневное испытание по Python для ученика ${userLevel} уровня.
         Верни ответ в формате JSON:
@@ -142,6 +306,7 @@ async function startServer() {
 
   app.post("/api/admin/generate-daily", async (req, res) => {
     try {
+      if (!model) throw new Error("Gemini is not configured");
       const prompt = `
         Ты — ИИ-Мастер в ролевой игре PyQuest. Сгенерируй 10 РАЗНЫХ ежедневных программистских задания на языке Python.
         Сложность должна быть разной: 3 easy, 4 medium, 3 hard.
@@ -197,7 +362,7 @@ async function startServer() {
     });
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, HOST, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
