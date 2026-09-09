@@ -1,35 +1,66 @@
 
 const API_BASE = "/api";
 
+export interface MentorChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface MentorChatProfile {
+  username?: string;
+  level?: number;
+}
+
+export interface DailyChallenge {
+  title: string;
+  description: string;
+  initialCode: string;
+  testCases: { inputValues: string[]; expectedOutput: string; description: string }[];
+  reward: { xp: number; coins: number };
+}
+
+const requestJson = async <T>(path: string, body: unknown): Promise<T> => {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) throw new Error(`Backend proxy error: ${response.status}`);
+  return response.json() as Promise<T>;
+};
+
 export const getMentorHint = async (code: string, challenge: string, error?: string) => {
   try {
-    const response = await fetch(`${API_BASE}/mentor/hint`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, challenge, error })
-    });
-    
-    if (!response.ok) throw new Error("Backend proxy error");
-    const data = await response.json();
+    const data = await requestJson<{ text: string }>("/mentor/hint", { code, challenge, error });
     return data.text;
-  } catch (error) {
-    console.error("Gemini Error:", error);
+  } catch (requestError) {
+    console.error("Gemini Error:", requestError);
     return "Хмм, мои нейронные связи немного запутались. Попробуй еще раз через минуту!";
+  }
+};
+
+export const getMentorChat = async (
+  messages: MentorChatMessage[],
+  profile?: MentorChatProfile,
+) => {
+  try {
+    const data = await requestJson<{ text: string }>("/mentor/chat", {
+      messages: messages.slice(-6),
+      profile,
+    });
+    return data.text;
+  } catch (requestError) {
+    console.error("Gemini Error:", requestError);
+    throw requestError;
   }
 };
 
 export const generateDailyChallenge = async (userLevel: number) => {
   try {
-    const response = await fetch(`${API_BASE}/daily-challenge`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userLevel })
-    });
-
-    if (!response.ok) throw new Error("Backend proxy error");
-    return await response.json();
-  } catch (error) {
-    console.error("Gemini Error:", error);
+    return await requestJson<DailyChallenge>("/daily-challenge", { userLevel });
+  } catch (requestError) {
+    console.error("Gemini Error:", requestError);
     
     return {
       title: "Анализ данных (Резервная ИИ-задача)",
