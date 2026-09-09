@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, X, Send, Sparkles, User, Bot, Loader2 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { MessageSquare, X, Send, Sparkles, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { getMentorChat, type MentorChatMessage } from '../services/gemini';
 
 import { playSound } from '../utils/sounds';
 
 export const FloatingChat = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([
+  const [messages, setMessages] = useState<MentorChatMessage[]>([
     { role: 'assistant', content: 'Привет, юный мастер кода! 🐍 Я твой ИИ-наставник. Готов помочь тебе пройти квесты и победить багов-монстров. О чем хочешь узнать сегодня?' }
   ]);
   const [input, setInput] = useState('');
@@ -35,33 +35,10 @@ export const FloatingChat = () => {
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      
-      const history = newMessages.slice(-6).map(m => `${m.role === 'user' ? 'Ученик' : 'Наставник'}: ${m.content}`).join('\n');
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `Ты - ИИ-наставник в игровом приложении PyQuest для изучения Python. 
-            Твоя задача - помогать ученику, отвечать на вопросы по Python, давать подсказки, но не решать задачи за него полностью. 
-            Будь дружелюбным, используй игровой сленг (квесты, опыт, уровни).
-            Информация об ученике: Имя: ${userProfile?.username || 'Ученик'}, Уровень: ${userProfile?.level || 1}.
-            
-            История последних сообщений:
-            ${history}
-            
-            Ответь на последнее сообщение ученика.` }]
-          }
-        ],
-        config: {
-          systemInstruction: "Ты - мудрый и веселый наставник-программист. Твоя цель - вдохновлять и обучать. Используй Markdown для форматирования кода.",
-        }
+      const aiText = await getMentorChat(newMessages, {
+        username: userProfile?.username,
+        level: userProfile?.level,
       });
-
-      const aiText = response.text || "Извини, я немного задумался. Попробуй еще раз!";
       
       setMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
       playSound('message');
@@ -104,7 +81,8 @@ export const FloatingChat = () => {
                 </div>
               </div>
               <button 
-                onClick={() => setIsOpen(false)}
+                  onClick={() => setIsOpen(false)}
+                  aria-label="Закрыть чат наставника"
                 className="p-2 hover:bg-white/5 rounded-full transition-colors text-white/40 hover:text-white"
               >
                 <X className="w-5 h-5" />
@@ -142,12 +120,14 @@ export const FloatingChat = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  maxLength={2000}
                   placeholder="Задай вопрос наставнику..."
                   className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-brand-primary transition-colors"
                 />
                 <button 
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
+                  aria-label="Отправить сообщение"
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-brand-primary hover:text-brand-secondary disabled:opacity-30 transition-colors"
                 >
                   <Send className="w-5 h-5" />
