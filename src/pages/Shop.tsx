@@ -186,7 +186,7 @@ export const ALL_ITEMS: ShopItem[] = [
 
 
 export function Shop() {
-  const { userProfile, buyItem, addCoins, quickSellItem, listMarketplaceItem, buyMarketplaceItem, getMarketplaceListings, updateQuestProgress } = useAuth();
+  const { userProfile, buyItem, payShopRefresh, quickSellItem, listMarketplaceItem, buyMarketplaceItem, getMarketplaceListings, updateQuestProgress } = useAuth();
   const [activeTab, setActiveTab] = useState<'shop' | 'marketplace' | 'inventory'>('shop');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
@@ -311,7 +311,8 @@ export function Shop() {
     setProcessingId('refresh');
     try {
       if (refreshCount > 0) {
-        await addCoins(-cost);
+        const paid = await payShopRefresh();
+        if (!paid) return;
       }
       
       playSound('click');

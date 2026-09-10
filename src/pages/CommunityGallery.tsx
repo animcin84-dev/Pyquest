@@ -4,10 +4,11 @@ import { Code2, Heart, Share2, Search, Filter, Plus, User, Calendar, MessageSqua
 import { Navbar } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, query, orderBy, getDocs, addDoc, serverTimestamp, updateDoc, doc, increment, limit } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, limit } from 'firebase/firestore';
 import { playSound } from '../utils/sounds';
 import { CodeEditor } from '../components/CodeEditor';
 import { toast } from 'sonner';
+import { postAuthenticated } from '../services/serverApi';
 
 interface Snippet {
   id: string;
@@ -193,19 +194,11 @@ export const CommunityGallery = () => {
 
     setIsSubmitting(true);
     try {
-      const docRef = await addDoc(collection(db, 'snippets'), {
-        title: newSnippet.title.trim(),
-        description: newSnippet.description.trim(),
+      await postAuthenticated('/community/snippets', {
+        title: newSnippet.title,
+        description: newSnippet.description,
         code: newSnippet.code,
-        authorId: userProfile.uid,
-        authorName: userProfile.username || 'Аноним',
-        authorPhoto: userProfile.avatar || '',
-        likes: 0,
-        stars: 0,
-        starredBy: [],
-        commentCount: 0,
         tags: newSnippet.tags.split(',').map(t => t.trim()).filter(t => t),
-        createdAt: serverTimestamp()
       });
       
       toast.success('Сниппет опубликован!');
@@ -226,14 +219,12 @@ export const CommunityGallery = () => {
 
   const handleLike = React.useCallback(async (snippetId: string) => {
     try {
-      const snippetRef = doc(db, 'snippets', snippetId);
-      await updateDoc(snippetRef, {
-        likes: increment(1)
-      });
-      setSnippets(prev => prev.map(s => s.id === snippetId ? { ...s, likes: s.likes + 1 } : s));
+      const result = await postAuthenticated<{ likes: number }>('/community/snippets/like', { snippetId });
+      setSnippets(prev => prev.map(s => s.id === snippetId ? { ...s, likes: result.likes } : s));
       playSound('click');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error liking snippet:', error);
+      toast.error(error?.message || 'Не удалось поставить лайк');
     }
   }, []);
 
@@ -246,39 +237,24 @@ export const CommunityGallery = () => {
     const snippet = snippets.find(s => s.id === snippetId);
     if (!snippet) return;
 
-    const isStarred = (snippet.starredBy || []).includes(userProfile.uid);
-    const snippetRef = doc(db, 'snippets', snippetId);
-
     try {
-      if (isStarred) {
-        
-        await updateDoc(snippetRef, {
-          stars: increment(-1),
-          starredBy: snippet.starredBy.filter(id => id !== userProfile.uid)
-        });
-        setSnippets(prev => prev.map(s => s.id === snippetId ? { 
-          ...s, 
-          stars: s.stars - 1, 
-          starredBy: s.starredBy.filter(id => id !== userProfile.uid) 
-        } : s));
+      const result = await postAuthenticated<{ stars: number; starred: boolean }>('/community/snippets/star', { snippetId });
+      setSnippets(prev => prev.map(s => s.id === snippetId ? {
+        ...s,
+        stars: result.stars,
+        starredBy: result.starred
+          ? [...new Set([...(s.starredBy || []), userProfile.uid])]
+          : (s.starredBy || []).filter(id => id !== userProfile.uid)
+      } : s));
+      if (!result.starred) {
         toast.success('Звезда убрана');
       } else {
-        
-        await updateDoc(snippetRef, {
-          stars: increment(1),
-          starredBy: [...(snippet.starredBy || []), userProfile.uid]
-        });
-        setSnippets(prev => prev.map(s => s.id === snippetId ? { 
-          ...s, 
-          stars: (s.stars || 0) + 1, 
-          starredBy: [...(s.starredBy || []), userProfile.uid] 
-        } : s));
         toast.success('Добавлено в избранное!');
         playSound('success');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error starring snippet:', error);
-      toast.error('Ошибка при обновлении звезды');
+      toast.error(error?.message || 'Ошибка при обновлении звезды');
     }
   }, [userProfile, snippets]);
 
@@ -307,18 +283,11 @@ export const CommunityGallery = () => {
 
     setIsPostingComment(true);
     try {
-      await addDoc(collection(db, `snippets/${selectedSnippet.id}/comments`), {
-        text: newComment.trim(),
-        authorId: userProfile.uid,
-        authorName: userProfile.username || 'Аноним',
-        authorPhoto: userProfile.avatar || '',
-        createdAt: serverTimestamp()
+      const result = await postAuthenticated<{ commentCount: number }>('/community/snippets/comments', {
+        snippetId: selectedSnippet.id,
+        text: newComment,
       });
-      
-      await updateDoc(doc(db, 'snippets', selectedSnippet.id), {
-        commentCount: increment(1)
-      });
-      setSnippets(prev => prev.map(s => s.id === selectedSnippet.id ? { ...s, commentCount: (s as any).commentCount + 1 } : s));
+      setSnippets(prev => prev.map(s => s.id === selectedSnippet.id ? { ...s, commentCount: result.commentCount } : s));
       
       setNewComment('');
       fetchComments(selectedSnippet.id);

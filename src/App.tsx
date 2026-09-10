@@ -26,7 +26,7 @@ const Admin = React.lazy(() => import('./pages/Admin').then(m => ({ default: m.A
 const Friends = React.lazy(() => import('./pages/Friends').then(m => ({ default: m.Friends })));
 const Tournaments = React.lazy(() => import('./pages/Tournaments').then(m => ({ default: m.Tournaments })));
 const TournamentArena = React.lazy(() => import('./pages/TournamentArena').then(m => ({ default: m.TournamentArena })));
-const Duels = React.lazy(() => import('./pages/Duels').then(m => ({ default: m.Duels })));
+const Duel = React.lazy(() => import('./pages/Duel').then(m => ({ default: m.Duel })));
 const BossArena = React.lazy(() => import('./pages/BossArena').then(m => ({ default: m.BossArena })));
 const CommunityGallery = React.lazy(() => import('./pages/CommunityGallery').then(m => ({ default: m.CommunityGallery })));
 const DailyChallenges = React.lazy(() => import('./pages/DailyChallenges').then(m => ({ default: m.DailyChallenges })));
@@ -117,12 +117,13 @@ const AnimatedRoutes = () => {
       <Route path="/friends" element={<Friends />} />
       <Route path="/tournaments" element={<Tournaments />} />
       <Route path="/tournaments/:id" element={<TournamentArena />} />
-      <Route path="/duels" element={<Duels />} />
+      <Route path="/duels" element={<Duel />} />
       <Route path="/boss-arena" element={<BossArena />} />
       <Route path="/gallery" element={<CommunityGallery />} />
       <Route path="/guilds" element={<Guilds />} />
       <Route path="/skill-tree" element={<SkillTree />} />
       <Route path="/u/:username" element={<UserProfilePublic />} />
+      <Route path="*" element={<Home />} />
     </Routes>
   );
 };

@@ -4,7 +4,7 @@ import {
   Shield, Users, Coins, Zap, Star, Swords, Brain, Heart, Package, 
   Search, History, Trash2, AlertTriangle, CheckCircle2, Terminal,
   BookOpen, Code2, Cpu, Flame, Key, Lock, Unlock, Database, Eye,
-  Trophy, Hammer, Ghost, Coffee, Rocket, GraduationCap, RefreshCw, Target
+  Trophy, Hammer, Ghost, Coffee, GraduationCap, RefreshCw, Target
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth, UserProfile } from '../contexts/AuthContext';
@@ -12,7 +12,6 @@ import { ALL_ITEMS } from './Shop';
 import { playSound } from '../utils/sounds';
 import { TextReveal } from '../components/TextReveal';
 import { LESSONS } from '../constants/lessons';
-import { GuildService } from '../services/GuildService';
 
 interface AdminLog {
   id: string;
@@ -49,19 +48,20 @@ export const Admin = () => {
   const [solutionSearch, setSolutionSearch] = useState('');
   const [selectedLesson, setSelectedLesson] = useState<any>(null);
   
-  const [questUser, setQuestUser] = useState<any>(null);
-  const [questUserLoading, setQuestUserLoading] = useState(false);
+  const [systemHealth, setSystemHealth] = useState<'loading' | 'online' | 'offline'>('loading');
 
-  const loadQuestUser = async (uid: string) => {
-    setQuestUserLoading(true);
-    try {
-      const results = await searchUsers(uid);
-      
-      setQuestUser(selectedUser);
-    } finally {
-      setQuestUserLoading(false);
-    }
-  };
+  useEffect(() => {
+    let isActive = true;
+    fetch('/api/health')
+      .then(response => {
+        if (!response.ok) throw new Error('Health check failed');
+        return response.json();
+      })
+      .then(() => isActive && setSystemHealth('online'))
+      .catch(() => isActive && setSystemHealth('offline'));
+
+    return () => { isActive = false; };
+  }, []);
 
   if (!isAdmin) {
     return (
@@ -776,28 +776,15 @@ export const Admin = () => {
                        </div>
                        <div className="p-6 bg-white/5 rounded-3xl border border-white/5">
                           <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Server Status</p>
-                          <p className="text-3xl font-black text-emerald-500">OPTIMAL</p>
+                          <p className={`text-3xl font-black ${systemHealth === 'online' ? 'text-emerald-500' : systemHealth === 'offline' ? 'text-red-500' : 'text-white/30'}`}>
+                            {systemHealth === 'online' ? 'ONLINE' : systemHealth === 'offline' ? 'OFFLINE' : 'CHECKING'}
+                          </p>
                        </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-4 justify-center">
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const count = await GuildService.seedGuilds();
-                          toast.success(`Успешно создано ${count} легендарных гильдий!`);
-                        } catch (e: any) {
-                          toast.error(`Ошибка сидинга: ${e.message}`);
-                        }
-                      }}
-                      className="px-8 py-4 bg-brand-primary/20 border border-brand-primary/40 rounded-2xl text-[10px] font-black uppercase tracking-widest text-brand-primary hover:bg-brand-primary hover:text-black transition-all shadow-[0_0_30px_rgba(139,92,246,0.1)]"
-                    >
-                      <Rocket className="w-3 h-3 inline mr-2" /> Seed Fake Guilds (World Population)
-                    </button>
-                    <button className="px-12 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-all">
-                      Generate Global Analytics
-                    </button>
-                  </div>
+                  <p className="text-center text-xs text-white/35 font-medium leading-relaxed">
+                    Тестовые гильдии и фиктивная аналитика отключены: здесь отображается только фактический статус сервера.
+                  </p>
                </div>
             </motion.div>
           )}
@@ -858,14 +845,11 @@ export const Admin = () => {
                         </button>
                      </div>
 
-                     <div className="p-10 glass rounded-[2.5rem] border border-white/5 opacity-50 cursor-not-allowed">
-                        <h3 className="text-2xl font-black italic mb-4 flex items-center gap-3"><Users className="text-brand-primary" /> Бонус XP (Soon)</h3>
+                     <div className="p-10 glass rounded-[2.5rem] border border-white/5">
+                        <h3 className="text-2xl font-black italic mb-4 flex items-center gap-3"><Users className="text-brand-primary" /> События опыта</h3>
                         <p className="text-white/40 text-sm leading-relaxed">
-                           Включите бонусный множитель опыта для всех игроков на определенное время.
+                           Массовые множители опыта отключены, пока их нельзя безопасно применять и отменять на сервере.
                         </p>
-                        <button disabled className="mt-8 w-full py-5 bg-white/5 border border-white/10 text-white/20 font-black rounded-3xl uppercase tracking-widest">
-                           ACTIVATE x2 XP
-                        </button>
                      </div>
                   </div>
                </div>

@@ -1,0 +1,7 @@
+# Local production assets and tooling artifacts are not part of the web app.
+video-production/
+graft/
+node_modules/
+dist/
+.git/
+.env*

@@ -4,15 +4,11 @@ import {
   where, 
   orderBy, 
   onSnapshot, 
-  addDoc, 
-  serverTimestamp, 
-  setDoc, 
-  doc, 
   getDocs,
-  limit,
-  updateDoc
+  limit
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { postAuthenticated } from './serverApi';
 
 export interface Message {
   id?: string;
@@ -32,42 +28,15 @@ export interface Chat {
 export const ChatService = {
   
   async getOrCreateChat(uid1: string, uid2: string): Promise<string> {
-    const participants = [uid1, uid2].sort();
-    const chatsRef = collection(db, 'chats');
-    const q = query(chatsRef, where('participants', '==', participants));
-    
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      return snapshot.docs[0].id;
-    }
-
-    
-    const newChatRef = await addDoc(chatsRef, {
-      participants,
-      updatedAt: serverTimestamp(),
-      lastMessage: '',
-      unreadCount: {
-        [uid1]: 0,
-        [uid2]: 0
-      }
-    });
-    return newChatRef.id;
+    void uid1;
+    const result = await postAuthenticated<{ chatId: string }>('/chats/direct', { recipientId: uid2 });
+    return result.chatId;
   },
 
   
   async sendMessage(chatId: string, senderId: string, text: string) {
-    const messagesRef = collection(db, 'chats', chatId, 'messages');
-    await addDoc(messagesRef, {
-      senderId,
-      text,
-      timestamp: serverTimestamp()
-    });
-
-    const chatRef = doc(db, 'chats', chatId);
-    await updateDoc(chatRef, {
-      lastMessage: text,
-      updatedAt: serverTimestamp()
-    });
+    void senderId;
+    await postAuthenticated('/chats/messages', { chatId, text });
   },
 
   

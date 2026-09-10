@@ -8,6 +8,8 @@ import { UserProfile, useAuth } from '../contexts/AuthContext';
 import { TextReveal } from '../components/TextReveal';
 import { MagneticButton } from '../components/MagneticButton';
 import { UserProfileModal } from '../components/UserProfileModal';
+import { SocialService } from '../services/SocialService';
+import { toast } from 'sonner';
 
 const LeaderboardRow = React.memo(({ user, index, onClick }: { user: UserProfile, index: number, onClick: () => void }) => {
   return (
@@ -98,6 +100,27 @@ export const Leaderboard = () => {
     setSelectedUser(user);
   }, []);
 
+  const handleMessage = React.useCallback((user: UserProfile) => {
+    if (!currentUser) {
+      window.dispatchEvent(new Event('open-auth-modal'));
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('open-private-chat', { detail: { userId: user.uid } }));
+  }, [currentUser]);
+
+  const handleAddFriend = React.useCallback(async (user: UserProfile) => {
+    if (!currentUser) {
+      window.dispatchEvent(new Event('open-auth-modal'));
+      return;
+    }
+    try {
+      await SocialService.sendFriendRequest(user.uid, user.username);
+      toast.success(`Заявка ${user.username} отправлена`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось отправить заявку');
+    }
+  }, [currentUser]);
+
   return (
     <div className="min-h-screen pt-32 pb-20 px-6 bg-[#050505] text-white">
       <div className="max-w-4xl mx-auto">
@@ -169,8 +192,8 @@ export const Leaderboard = () => {
           isOpen={true}
           onClose={() => setSelectedUser(null)}
           currentUserId={currentUser?.uid}
-          onMessage={() => alert('Чат в разработке!')}
-          onAddFriend={() => alert('Друзья в разработке!')}
+          onMessage={handleMessage}
+          onAddFriend={handleAddFriend}
         />
       )}
     </div>

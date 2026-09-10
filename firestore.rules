@@ -69,9 +69,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "animcinca84@gmail.com" && request.auth.token.email_verified == true));
+      return isAuthenticated() && request.auth.token.admin == true;
     }
 
     function isValidUser(data) {
@@ -115,6 +113,26 @@ service cloud.firestore {
              data.timestamp is timestamp;
     }
 
+    function isSafeInitialUser(data) {
+      return isValidUser(data) &&
+             data.xp == 0 && data.level == 1 && data.coins == 100 &&
+             data.inventory.size() == 0 && data.completedLessons.size() == 0 &&
+             data.stats.logic == 1 && data.stats.speed == 1 && data.stats.power == 1 &&
+             data.stats.intellect == 1 && data.stats.stamina == 1 &&
+             (!('role' in data) || data.role == 'user');
+    }
+
+    function hasOnlyPublicProfileChanges() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['username', 'avatar', 'bio']) &&
+             request.resource.data.username is string &&
+             request.resource.data.username.size() > 0 &&
+             request.resource.data.username.size() < 50 &&
+             (!('avatar' in request.resource.data) || request.resource.data.avatar is string) &&
+             (!('bio' in request.resource.data) ||
+               (request.resource.data.bio is string && request.resource.data.bio.size() < 500));
+    }
+
     
     
     
@@ -148,41 +166,47 @@ service cloud.firestore {
 
     match /snippets/{snippetId} {
       allow read: if true;
-      allow create: if isAuthenticated() && isValidSnippet(request.resource.data);
-      allow update: if isAuthenticated() && (
-        (isOwner(resource.data.authorId) && isValidSnippet(request.resource.data)) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasAny(['likes', 'commentCount', 'stars', 'starredBy']))
-      );
-      allow delete: if isAuthenticated() && isOwner(resource.data.authorId);
+      // Publishing, reactions, and counters are server-managed to prevent forged
+      // authors, unlimited likes, and direct counter manipulation.
+      allow write: if isAdmin();
 
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
-        allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.authorId == request.auth.uid);
+        allow write: if isAdmin();
+      }
+
+      match /likes/{likeId} {
+        allow read, write: if isAdmin();
+      }
+
+      match /stars/{starId} {
+        allow read, write: if isAdmin();
       }
     }
 
     match /chats/{chatId} {
       allow read: if isAuthenticated() && (request.auth.uid in resource.data.participants);
-      allow create: if isAuthenticated() && (request.auth.uid in request.resource.data.participants);
-      allow update: if isAuthenticated() && (request.auth.uid in resource.data.participants);
+      allow write: if isAdmin();
       
       match /messages/{messageId} {
         allow read: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
-        allow create: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants) && request.resource.data.senderId == request.auth.uid;
+        allow write: if isAdmin();
       }
     }
 
     match /active_bosses/{bossId} {
-      allow read, write, create, update, delete: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /ai_quests/{questId} {
-      allow read, write, create, update, delete: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /friend_requests/{requestId} {
-      allow read, write, create, update, delete: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /system/{docId} {
@@ -192,43 +216,58 @@ service cloud.firestore {
 
     match /friendships/{friendshipId} {
       allow read: if isAuthenticated() && (request.auth.uid in resource.data.users);
-      allow create: if isAuthenticated() && (request.auth.uid in request.resource.data.users);
-      allow update: if isAuthenticated() && (request.auth.uid in resource.data.users);
-      allow delete: if isAuthenticated() && (request.auth.uid in resource.data.users);
+      allow write: if isAdmin();
     }
 
     match /guilds/{guildId} {
       allow read: if true;
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && request.auth.uid in resource.data.members;
-      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.leaderId);
+      allow write: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+      }
     }
 
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (!('role' in request.resource.data) || request.resource.data.role == 'user');
+      allow create: if isOwner(userId) && isSafeInitialUser(request.resource.data);
       
-      allow update: if isAdmin() || (isOwner(userId) && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role));
+      allow update: if isAdmin() || (isOwner(userId) && hasOnlyPublicProfileChanges());
       allow delete: if isAdmin();
     }
 
     match /marketplace/{listingId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidListing(request.resource.data);
-      allow update: if isAdmin();
-      allow delete: if isAuthenticated() && (resource.data.sellerId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
     }
 
     match /trades/{tradeId} {
       allow read: if isAuthenticated() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && isValidTrade(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.receiverId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /logs/{logId} {
       allow read: if isAdmin();
       allow create: if isAdmin() && isValidLog(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /messages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.text is string && request.resource.data.text.size() > 0 &&
+        request.resource.data.text.size() <= 1000;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid &&
+        request.resource.data.lessonId is string && request.resource.data.lessonId.size() <= 120 &&
+        request.resource.data.code is string && request.resource.data.code.size() <= 20000;
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
 

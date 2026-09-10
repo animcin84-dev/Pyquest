@@ -7547,12 +7547,12 @@ export const LESSONS: Lesson[] = [
       },
       {
         "question": "Задача 5: Босс - Вывод Ошибки",
-        "description": "Напиши команду `logging.error('Crash')` (Заглушка через print). Выведи 'ERROR:root:Crash'.",
+        "description": "Импортируйте logging и вызовите `logging.error('Crash')`.",
         "difficulty": "Advanced",
-        "initialCode": "print('...')",
+        "initialCode": "import logging\n\nlogging.error('Crash')",
         "testCases": [
           {
-            "expectedOutput": "ERROR:root:Crash"
+            "assertCode": "assert 'ERROR:root:Crash' in sys.stderr.getvalue()"
           }
         ]
       }
@@ -8194,7 +8194,7 @@ export const LESSONS: Lesson[] = [
     }
   },
   {
-    "id": "git",
+    "id": "git-practice",
     "title": "Git: Хроники Кода",
     "description": "Инициализация репозитория, коммиты, ветки и GitHub. Без этого в IT делать нечего.",
     "icon": "GitMerge",
@@ -8276,7 +8276,7 @@ export const LESSONS: Lesson[] = [
     ]
   },
   {
-    "id": "requests",
+    "id": "requests-practice",
     "title": "Requests: Вестники Интернета",
     "description": "Как отправлять запросы к сайтам и получать данные. Основа любого бота или парсера.",
     "icon": "Globe",
@@ -8357,7 +8357,7 @@ export const LESSONS: Lesson[] = [
     ]
   },
   {
-    "id": "os-pathlib",
+    "id": "os-pathlib-practice",
     "title": "Библиотека os и pathlib: Властелин Файлов",
     "description": "Работа с путями и системными папками (создание, удаление, поиск файлов).",
     "icon": "FolderTree",
@@ -8438,7 +8438,7 @@ export const LESSONS: Lesson[] = [
     ]
   },
   {
-    "id": "pytest",
+    "id": "pytest-practice",
     "title": "Pytest: Испытательный Стенд",
     "description": "Автоматические тесты. Профи не проверяет код руками, за него это делает тест.",
     "icon": "Thermometer",
@@ -8519,7 +8519,7 @@ export const LESSONS: Lesson[] = [
     ]
   },
   {
-    "id": "logging",
+    "id": "logging-practice",
     "title": "Logging: Черный Ящик",
     "description": "Замени print() на систему логов, чтобы знать, что упало у пользователя через неделю работы.",
     "icon": "ScrollText",
@@ -8586,20 +8586,19 @@ export const LESSONS: Lesson[] = [
       },
       {
         "question": "Задача 5: Босс - Вывод Ошибки",
-        "description": "Напиши команду `logging.error('Crash')` (Заглушка через print). Выведи 'ERROR:root:Crash'.",
+        "description": "Импортируйте logging и вызовите `logging.error('Crash')`.",
         "difficulty": "Advanced",
-        "initialCode": "print('...')",
+        "initialCode": "import logging\n\nlogging.error('Crash')",
         "testCases": [
           {
-            "input": "print('ERROR:root:Crash')",
-            "expectedOutput": "ERROR:root:Crash"
+            "assertCode": "assert 'ERROR:root:Crash' in sys.stderr.getvalue()"
           }
         ]
       }
     ]
   },
   {
-    "id": "sql",
+    "id": "sql-practice",
     "title": "SQL и Базы Данных: Вечные Архивы",
     "description": "Хранить всё в JSON или TXT — путь новичка. Настоящие данные живут в таблицах.",
     "icon": "DatabaseBackup",
@@ -8679,7 +8678,7 @@ export const LESSONS: Lesson[] = [
     ]
   },
   {
-    "id": "algorithms",
+    "id": "algorithms-practice",
     "title": "Алгоритмы и Структуры Данных",
     "description": "Бинарный поиск, сортировки, сложность O(n). То, что спрашивают на собесах.",
     "icon": "Network",
@@ -8759,7 +8758,7 @@ export const LESSONS: Lesson[] = [
     ]
   },
   {
-    "id": "docker",
+    "id": "docker-practice",
     "title": "Docker: Контейнеризация Магии",
     "description": "Запакуй код так, чтобы он работал на любом сервере одинаково.",
     "icon": "Box",
@@ -8839,7 +8838,7 @@ export const LESSONS: Lesson[] = [
     ]
   },
   {
-    "id": "cicd",
+    "id": "cicd-practice",
     "title": "CI/CD: Конвейер Артефактов",
     "description": "Автоматический деплой и тестирование кода при пуше в GitHub.",
     "icon": "GitPullRequest",
@@ -8919,7 +8918,7 @@ export const LESSONS: Lesson[] = [
     ]
   },
   {
-    "id": "type-hinting",
+    "id": "type-hinting-practice",
     "title": "Type Hinting: Печать Типов",
     "description": "Сделай Python-код надежным, как в C++ или Java. Использование Pydantic.",
     "icon": "Type",

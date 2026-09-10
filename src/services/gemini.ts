@@ -1,5 +1,5 @@
 
-const API_BASE = "/api";
+import { postAuthenticated } from './serverApi';
 
 export interface MentorChatMessage {
   role: "user" | "assistant";
@@ -20,14 +20,7 @@ export interface DailyChallenge {
 }
 
 const requestJson = async <T>(path: string, body: unknown): Promise<T> => {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) throw new Error(`Backend proxy error: ${response.status}`);
-  return response.json() as Promise<T>;
+  return postAuthenticated<T>(path, body);
 };
 
 export const getMentorHint = async (code: string, challenge: string, error?: string) => {

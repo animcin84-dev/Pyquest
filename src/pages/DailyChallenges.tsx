@@ -93,7 +93,7 @@ export const DailyChallenges = () => {
           id: 'ai_daily',
           type: 'code',
           difficulty: 'medium',
-          isCompleted: userProfile?.completedDailyChallenges?.includes(`${new Date().toDateString()}_ai_daily`) || false
+          isCompleted: userProfile?.completedDailyChallenges?.includes(`${AIQuestService.getTodayDateStr()}_ai_daily`) || false
         });
         playSound('success');
       }

@@ -9,10 +9,11 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc, increment, collection, addDoc, deleteDoc, getDocs, query, where, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc, increment, collection, addDoc, deleteDoc, getDocs, query, where, limit, onSnapshot } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { ALL_ITEMS } from '../pages/Shop';
 import { calculateRank } from '../utils/ranks';
+import { postAuthenticated } from '../services/serverApi';
 
 enum OperationType {
   CREATE = 'create',
@@ -23,46 +24,24 @@ enum OperationType {
   WRITE = 'write',
 }
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
-  }
-}
-
 const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
+  console.error('Firestore operation failed', {
     operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+    path,
+    code: typeof error === 'object' && error && 'code' in error ? String(error.code) : undefined,
+  });
+  throw new Error('Не удалось сохранить данные. Попробуйте ещё раз.');
+};
+
+const getDailyChallengeDate = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Almaty',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 };
 
 interface Quest {
@@ -182,10 +161,11 @@ interface AuthContextType {
   register: (username: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  addXp: (amount: number) => Promise<void>;
-  addCoins: (amount: number) => Promise<void>;
-  subtractCoins: (amount: number) => Promise<void>;
-  subtractXp: (amount: number) => Promise<void>;
+  payShopRefresh: () => Promise<boolean>;
+  claimArcadeReward: (gameId: string) => Promise<boolean>;
+  claimSoloBossReward: (bossId: string) => Promise<boolean>;
+  contributeToGlobalBoss: (bossId: string) => Promise<{ damage: number; currentHp: number } | null>;
+  claimTournamentReward: (tournamentId: string) => Promise<boolean>;
   completeLesson: (lessonId: string, xpReward: number) => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
   claimDailyReward: () => Promise<boolean>;
@@ -226,7 +206,10 @@ interface AuthContextType {
   adminSpawnBoss: (templateId: string) => Promise<void>;
   saveSubmission: (lessonId: string, code: string, results: any) => Promise<void>;
   getSubmissions: (lessonId: string) => Promise<any[]>;
-  useItem: (inventoryId: string) => Promise<void>;
+  useItem: (inventoryId: string, asPetFood?: boolean) => Promise<{ message: string } | null>;
+  customizePet: (changes: Pick<NonNullable<UserProfile['pet']>, 'name' | 'type' | 'customPixels'>) => Promise<boolean>;
+  trainPet: (stat: 'logic' | 'speed' | 'power') => Promise<boolean>;
+  unlockPerk: (perkId: string) => Promise<boolean>;
   performanceSettings: PerformanceSettings;
   setLowPerfMode: (enabled: boolean) => void;
 }
@@ -251,7 +234,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentChallenge, setCurrentChallenge] = useState('');
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(() => {
     const saved = localStorage.getItem('pyquest_perf_settings');
-    return saved ? JSON.parse(saved) : { lowPerfMode: false };
+    if (!saved) return { lowPerfMode: false };
+    try {
+      const parsed: unknown = JSON.parse(saved);
+      return typeof parsed === 'object' && parsed !== null && 'lowPerfMode' in parsed &&
+        typeof parsed.lowPerfMode === 'boolean'
+        ? { lowPerfMode: parsed.lowPerfMode }
+        : { lowPerfMode: false };
+    } catch {
+      localStorage.removeItem('pyquest_perf_settings');
+      return { lowPerfMode: false };
+    }
   });
 
   const setLowPerfMode = React.useCallback((enabled: boolean) => {
@@ -282,20 +275,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     if (stats) {
       const avgStat = (stats.logic + stats.speed + stats.power + stats.intellect + stats.stamina) / 5;
-      if (avgStat >= 80 && level >= 40) return 'S';
       if (avgStat >= 95 && level >= 80) return 'SSS';
+      if (avgStat >= 80 && level >= 40) return 'S';
     }
 
     return rank;
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeProfile = () => {};
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       try {
+        unsubscribeProfile();
         setCurrentUser(user);
         if (user) {
           const docRef = doc(db, 'users', user.uid);
           const docSnap = await getDoc(docRef);
+          if (auth.currentUser?.uid !== user.uid) return;
           if (docSnap.exists()) {
             setUserProfile(docSnap.data() as UserProfile);
           } else {
@@ -322,6 +318,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await setDoc(doc(db, 'users', user.uid), newProfile);
             setUserProfile(newProfile);
           }
+          unsubscribeProfile = onSnapshot(docRef, (snapshot) => {
+            if (snapshot.exists()) setUserProfile(snapshot.data() as UserProfile);
+          }, (error) => {
+            console.error('Profile sync failed', { code: error.code });
+          });
         } else {
           setUserProfile(null);
         }
@@ -332,24 +333,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      unsubscribeProfile();
+    };
   }, []);
 
-  const getFakeEmail = (username: string) => `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@pyquest.app`;
+  const getLoginEmail = (username: string) => {
+    const normalizedUsername = username.trim().normalize('NFKC');
+    if (!normalizedUsername) {
+      throw new Error('Введите никнейм.');
+    }
+
+    const encodedUsername = Array.from(new TextEncoder().encode(normalizedUsername))
+      .map(byte => byte.toString(16).padStart(2, '0'))
+      .join('');
+
+    return `u${encodedUsername}@pyquest.app`;
+  };
+
+  const getLegacyLoginEmail = (username: string) => {
+    const localPart = username.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    return localPart ? `${localPart}@pyquest.app` : null;
+  };
 
   const login = React.useCallback(async (username: string, password: string) => {
-    const email = getFakeEmail(username);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      playSound('success');
-    } catch (error) {
-      playSound('error');
-      throw error;
+    const emailCandidates = [getLoginEmail(username), getLegacyLoginEmail(username)]
+      .filter((email): email is string => Boolean(email))
+      .filter((email, index, candidates) => candidates.indexOf(email) === index);
+
+    let lastError: unknown;
+    for (const email of emailCandidates) {
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        playSound('success');
+        return;
+      } catch (error) {
+        lastError = error;
+        const code = typeof error === 'object' && error && 'code' in error
+          ? String(error.code)
+          : '';
+
+        if (!['auth/invalid-credential', 'auth/user-not-found', 'auth/invalid-email'].includes(code)) {
+          playSound('error');
+          throw error;
+        }
+      }
     }
+
+    playSound('error');
+    throw lastError ?? new Error('Не удалось войти в аккаунт.');
   }, []);
 
   const register = React.useCallback(async (username: string, password: string) => {
-    const email = getFakeEmail(username);
+    const email = getLoginEmail(username);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -381,8 +418,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       playSound('success');
     } catch (err) {
       playSound('error');
+      const code = typeof err === 'object' && err && 'code' in err ? String(err.code) : '';
+      if (code.startsWith('auth/')) {
+        throw err;
+      }
       handleFirestoreError(err, OperationType.WRITE, `users/${auth.currentUser?.uid}`);
-      throw err;
     }
   }, []);
 
@@ -407,23 +447,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const isAdmin = Boolean(currentUser && (
-    currentUser.email === 'admin@pyquest.app' ||
-    currentUser.email === 'anim@pyquest.app' ||
-    currentUser.email === 'test@test.com' ||
-    currentUser.email === 'animcinca84@gmail.com' ||
-    userProfile?.username?.toUpperCase() === 'ANIM' ||
-    userProfile?.role === 'admin'
-  ));
-
-  useEffect(() => {
-    if (currentUser) {
-      console.log('AuthContext: Current User Email:', currentUser.email);
-      console.log('AuthContext: Current User UID:', currentUser.uid);
-      console.log('AuthContext: User Profile:', userProfile);
-      console.log('AuthContext: Is Admin:', isAdmin);
-    }
-  }, [currentUser, isAdmin, userProfile]);
+  // This only controls the interface. Server and Firestore authorization must
+  // still rely on protected roles or custom claims, never on a client email list.
+  const isAdmin = Boolean(currentUser && userProfile?.role === 'admin');
 
 
 
@@ -501,71 +527,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sendTradeRequest = React.useCallback(async (targetUserId: string, myItems: string[], theirItems: string[]) => {
     if (!currentUser || !userProfile) return;
     try {
-      await addDoc(collection(db, 'trades'), {
-        senderId: currentUser.uid,
-        senderName: userProfile.username,
+      await postAuthenticated('/trades/create', {
         receiverId: targetUserId,
-        senderItems: myItems,
-        receiverItems: theirItems,
-        status: 'pending',
-        createdAt: serverTimestamp()
+        senderItemIds: myItems,
+        receiverItemIds: theirItems,
       });
-      updateQuestProgress('trade_request');
       playSound('success');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'trades');
     }
-  }, [currentUser, userProfile, updateQuestProgress]);
+  }, [currentUser, userProfile]);
 
   const acceptTradeRequest = React.useCallback(async (tradeId: string) => {
     if (!currentUser || !userProfile) return;
     try {
-      const tradeRef = doc(db, 'trades', tradeId);
-      const tradeSnap = await getDoc(tradeRef);
-      if (!tradeSnap.exists()) return;
-      
-      const tradeData = tradeSnap.data();
-      if (tradeData.status !== 'pending') return;
-
-      const senderRef = doc(db, 'users', tradeData.senderId);
-      const receiverRef = doc(db, 'users', tradeData.receiverId);
-
-      const senderSnap = await getDoc(senderRef);
-      const receiverSnap = await getDoc(receiverRef);
-
-      if (!senderSnap.exists() || !receiverSnap.exists()) return;
-
-      const senderData = senderSnap.data() as UserProfile;
-      const receiverData = receiverSnap.data() as UserProfile;
-
-      
-      const newSenderInventory = [
-        ...senderData.inventory.filter(item => !tradeData.senderItems.includes(item.id)),
-        ...receiverData.inventory.filter(item => tradeData.receiverItems.includes(item.id))
-      ];
-      const newReceiverInventory = [
-        ...receiverData.inventory.filter(item => !tradeData.receiverItems.includes(item.id)),
-        ...senderData.inventory.filter(item => tradeData.senderItems.includes(item.id))
-      ];
-
-      await updateDoc(senderRef, { inventory: newSenderInventory });
-      await updateDoc(receiverRef, { inventory: newReceiverInventory });
-      await updateDoc(tradeRef, { status: 'accepted' });
-
-      updateQuestProgress('trade_accept');
-      if (tradeData.receiverId === currentUser.uid) {
-        setUserProfile({ ...userProfile, inventory: newReceiverInventory });
-      }
-
+      const result = await postAuthenticated<{ inventory: InventoryItem[] }>('/trades/accept', { tradeId });
+      setUserProfile({ ...userProfile, inventory: result.inventory });
       playSound('buy');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'trades');
     }
-  }, [currentUser, userProfile, updateQuestProgress]);
+  }, [currentUser, userProfile]);
 
   const cancelTradeRequest = React.useCallback(async (tradeId: string) => {
     try {
-      await updateDoc(doc(db, 'trades', tradeId), { status: 'cancelled' });
+      await postAuthenticated('/trades/cancel', { tradeId });
       playSound('click');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `trades/${tradeId}`);
@@ -604,212 +590,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
-  const checkAchievements = React.useCallback(async (profile: UserProfile) => {
-    try {
-      const { ACHIEVEMENTS } = await import('../constants/achievements');
-      const unlocked = profile.achievements || [];
-      const newAchievements: string[] = [];
-      
-      let bonusXp = 0;
-      let bonusCoins = 0;
-
-      for (const ach of ACHIEVEMENTS) {
-        if (unlocked.includes(ach.id)) continue;
-
-        let met = false;
-        switch (ach.requirementType) {
-          case 'level': met = profile.level >= ach.requirementValue; break;
-          case 'lessons': met = (profile.completedLessons?.length || 0) >= ach.requirementValue; break;
-          case 'coins': met = profile.coins >= ach.requirementValue; break;
-          case 'items_owned': met = (profile.inventory?.length || 0) >= ach.requirementValue; break;
-        }
-
-        if (met) {
-          newAchievements.push(ach.id);
-          toast.success(`ДОСТИЖЕНИЕ: ${ach.name}! +${ach.reward.xp} XP, +${ach.reward.coins} Монет`, { icon: '🏆' });
-          bonusXp += ach.reward.xp;
-          bonusCoins += ach.reward.coins;
-        }
-      }
-
-      if (newAchievements.length > 0) {
-        const finalAchievements = [...unlocked, ...newAchievements];
-        await updateDoc(doc(db, 'users', profile.uid), {
-          achievements: finalAchievements,
-          xp: increment(bonusXp),
-          coins: increment(bonusCoins)
-        });
-        
-        setUserProfile(prev => prev ? { 
-           ...prev, 
-           achievements: finalAchievements,
-           xp: prev.xp + bonusXp,
-           coins: (prev.coins || 0) + bonusCoins
-        } : null);
-      }
-    } catch (err) {
-      console.error('Achievement check failed:', err);
-    }
-  }, []);
-
-  const addXp = React.useCallback(async (amount: number) => {
-    if (!currentUser || !userProfile) return;
-    
-    let xpGain = amount;
-    if (userProfile.perks?.includes('fast_learner')) {
-      xpGain = Math.floor(xpGain * 1.1);
-    }
-
-    const newXp = userProfile.xp + xpGain;
-    const newLevel = Math.floor(newXp / 250) + 1; 
-    
-    let coinsReward = Math.floor(xpGain / 2);
-    if (userProfile.perks?.includes('golden_touch')) {
-      coinsReward = Math.floor(coinsReward * 1.1);
-    }
-    
-    
-    if (userProfile.pet && (userProfile.pet.level || 0) >= 20) {
-      coinsReward = Math.floor(coinsReward * 1.2);
-    }
-
-    if (newLevel > userProfile.level) {
-      setLevelUp(newLevel);
-      playSound('levelUp');
-      
-      const spReward = (newLevel - userProfile.level) * 5;
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        skillPoints: increment(spReward)
-      });
-    }
-
-    try {
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        xp: increment(amount),
-        level: newLevel,
-        coins: increment(coinsReward)
-      });
-      const updatedProfile = { ...userProfile, xp: newXp, level: newLevel, coins: (userProfile.coins || 0) + coinsReward };
-      setUserProfile(updatedProfile);
-      updateQuestProgress('gain_xp', amount);
-      await checkAchievements(updatedProfile);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
-    }
-  }, [currentUser, userProfile, updateQuestProgress, checkAchievements]);
-
-  const addCoins = React.useCallback(async (amount: number) => {
-    if (!currentUser || !userProfile) return;
-    
-    let finalAmount = amount;
-    if (userProfile.pet && (userProfile.pet.level || 0) >= 20) {
-      finalAmount = Math.floor(amount * 1.2);
-      if (finalAmount > amount) {
-        toast.success(`Магнит монет активирован! +${finalAmount - amount} бонусных монет`, { icon: '💰' });
-      }
-    }
-
-    try {
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        coins: increment(finalAmount)
-      });
-      const updatedProfile = { ...userProfile, coins: (userProfile.coins || 0) + finalAmount };
-      setUserProfile(updatedProfile);
-      updateQuestProgress('earn_coins', amount);
-      await checkAchievements(updatedProfile);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
-    }
-  }, [currentUser, userProfile, updateQuestProgress, checkAchievements]);
-
-  const subtractCoins = React.useCallback(async (amount: number) => {
-    if (!currentUser || !userProfile) return;
-    try {
-      const newCoins = Math.max(0, (userProfile.coins || 0) - amount);
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        coins: newCoins
-      });
-      setUserProfile({ ...userProfile, coins: newCoins });
-      playSound('error');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
-    }
-  }, [currentUser, userProfile]);
-
-  const subtractXp = React.useCallback(async (amount: number) => {
-    if (!currentUser || !userProfile) return;
-    try {
-      const newXp = Math.max(0, userProfile.xp - amount);
-      const newLevel = Math.floor(newXp / 250) + 1;
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        xp: newXp,
-        level: newLevel
-      });
-      setUserProfile({ ...userProfile, xp: newXp, level: newLevel });
-      playSound('error');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
-    }
-  }, [currentUser, userProfile]);
-
   const buyItem = React.useCallback(async (itemId: string, price: number) => {
     if (!currentUser || !userProfile) return false;
-    if ((userProfile.coins || 0) < price) {
-      playSound('error');
-      return false;
-    }
-    
     const item = ALL_ITEMS.find(i => i.id === itemId);
     if (!item) return false;
 
-    const newItem: InventoryItem = {
-      id: `${itemId}_${Date.now()}`,
-      itemId: itemId,
-      name: item.name,
-      acquiredAt: Date.now()
-    };
-
     try {
-      const updatedInventory = [...(userProfile.inventory || []), newItem];
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        coins: increment(-price),
-        inventory: updatedInventory
-      });
+      const purchase = await postAuthenticated<{ coins: number; inventory: InventoryItem[] }>('/shop/purchase', { itemId });
       const updatedProfile = { 
         ...userProfile, 
-        coins: userProfile.coins - price,
-        inventory: updatedInventory
+        coins: purchase.coins,
+        inventory: purchase.inventory,
       };
       setUserProfile(updatedProfile);
       playSound('buy');
-      await checkAchievements(updatedProfile);
       return true;
     } catch (error) {
       playSound('error');
       handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
       return false;
     }
-  }, [currentUser, userProfile, checkAchievements]);
+  }, [currentUser, userProfile]);
 
   const quickSellItem = React.useCallback(async (inventoryId: string) => {
     if (!currentUser || !userProfile) return false;
     if (!userProfile.inventory?.some(item => item.id === inventoryId)) return false;
 
-    
-    const sellPrice = 100; 
     try {
-      const updatedInventory = userProfile.inventory.filter(item => item.id !== inventoryId);
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        coins: increment(sellPrice),
-        inventory: updatedInventory
-      });
+      const sale = await postAuthenticated<{ coins: number; inventory: InventoryItem[]; sellPrice: number }>(
+        '/shop/quick-sell',
+        { inventoryId },
+      );
       setUserProfile({
         ...userProfile,
-        coins: (userProfile.coins || 0) + sellPrice,
-        inventory: updatedInventory
+        coins: sale.coins,
+        inventory: sale.inventory,
       });
-      updateQuestProgress('sell_item');
-      updateQuestProgress('earn_coins', sellPrice);
       playSound('success');
       return true;
     } catch (error) {
@@ -817,33 +633,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
       return false;
     }
-  }, [currentUser, userProfile, updateQuestProgress]);
+  }, [currentUser, userProfile]);
+
+  const payShopRefresh = React.useCallback(async () => {
+    if (!currentUser || !userProfile) return false;
+    try {
+      const result = await postAuthenticated<{ coins: number; refreshCost: number }>('/shop/refresh');
+      setUserProfile({ ...userProfile, coins: result.coins });
+      return true;
+    } catch (error) {
+      console.error('Shop refresh payment failed');
+      toast.error('Не удалось оплатить обновление магазина.');
+      return false;
+    }
+  }, [currentUser, userProfile]);
 
   const listMarketplaceItem = React.useCallback(async (inventoryId: string, price: number) => {
     if (!currentUser || !userProfile) return false;
-    const itemToSell = userProfile.inventory?.find(item => item.id === inventoryId);
-    if (!itemToSell) return false;
 
     try {
-      
-      const updatedInventory = userProfile.inventory.filter(item => item.id !== inventoryId);
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        inventory: updatedInventory
-      });
-      
-      
-      await addDoc(collection(db, 'marketplace'), {
-        sellerId: currentUser.uid,
-        sellerName: userProfile.username,
-        itemId: itemToSell.itemId,
-        itemName: itemToSell.name,
+      const listing = await postAuthenticated<{ inventory: InventoryItem[] }>('/marketplace/list', {
+        inventoryId,
         price,
-        createdAt: serverTimestamp()
       });
 
       setUserProfile({
         ...userProfile,
-        inventory: updatedInventory
+        inventory: listing.inventory,
       });
       
       playSound('success');
@@ -857,35 +673,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const buyMarketplaceItem = React.useCallback(async (listing: MarketplaceListing) => {
     if (!currentUser || !userProfile) return false;
-    if ((userProfile.coins || 0) < listing.price) return false;
-
-    const newItem: InventoryItem = {
-      id: `${listing.itemId}_${Date.now()}`,
-      itemId: listing.itemId,
-      name: listing.itemName,
-      acquiredAt: Date.now()
-    };
 
     try {
-      
-      const updatedInventory = [...(userProfile.inventory || []), newItem];
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        coins: increment(-listing.price),
-        inventory: updatedInventory
-      });
-
-      
-      await updateDoc(doc(db, 'users', listing.sellerId), {
-        coins: increment(listing.price)
-      });
-
-      
-      await deleteDoc(doc(db, 'marketplace', listing.id));
+      const purchase = await postAuthenticated<{ coins: number; inventory: InventoryItem[] }>(
+        '/marketplace/purchase',
+        { listingId: listing.id },
+      );
 
       setUserProfile({
         ...userProfile,
-        coins: (userProfile.coins || 0) - listing.price,
-        inventory: updatedInventory
+        coins: purchase.coins,
+        inventory: purchase.inventory,
       });
 
       playSound('buy');
@@ -915,40 +713,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser || !userProfile) return;
     if (userProfile.completedLessons.includes(lessonId)) return; 
 
-    let xpGain = xpReward;
-    if (userProfile.perks?.includes('fast_learner')) {
-      xpGain = Math.floor(xpGain * 1.1);
-    }
-
-    const newXp = userProfile.xp + xpGain;
-    const newLevel = Math.floor(newXp / 250) + 1;
-    const newCompletedLessons = [...userProfile.completedLessons, lessonId];
-    
-    let coinsGain = xpGain;
-    if (userProfile.perks?.includes('golden_touch')) {
-      coinsGain = Math.floor(coinsGain * 1.1);
-    }
-
-    if (newLevel > userProfile.level) {
-      setLevelUp(newLevel);
-      playSound('levelUp');
-    } else {
-      playSound('success');
-    }
-
     try {
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        xp: increment(xpGain),
-        level: newLevel,
-        completedLessons: newCompletedLessons,
-        coins: increment(coinsGain)
-      });
+      // XP comes from the server's canonical lesson catalogue. `xpReward` is
+      // retained for existing page call sites but is deliberately ignored.
+      void xpReward;
+      const result = await postAuthenticated<Pick<UserProfile, 'completedLessons' | 'xp' | 'coins' | 'level' | 'skillPoints'>>(
+        '/lessons/complete',
+        { lessonId },
+      );
+      if (result.level > userProfile.level) {
+        setLevelUp(result.level);
+        playSound('levelUp');
+      } else {
+        playSound('success');
+      }
       setUserProfile({ 
         ...userProfile, 
-        xp: newXp, 
-        level: newLevel,
-        completedLessons: newCompletedLessons,
-        coins: (userProfile.coins || 0) + coinsGain
+        ...result,
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
@@ -957,9 +738,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProfile = React.useCallback(async (data: Partial<UserProfile>) => {
     if (!currentUser || !userProfile) return;
+    const publicProfile: Pick<Partial<UserProfile>, 'username' | 'avatar' | 'bio'> = {};
+    if (typeof data.username === 'string') publicProfile.username = data.username.trim().slice(0, 49);
+    if (typeof data.avatar === 'string') publicProfile.avatar = data.avatar.slice(0, 500);
+    if (typeof data.bio === 'string') publicProfile.bio = data.bio.slice(0, 500);
+    if (Object.keys(publicProfile).length === 0) {
+      throw new Error('Only public profile fields can be changed here.');
+    }
     try {
-      await updateDoc(doc(db, 'users', currentUser.uid), data);
-      setUserProfile({ ...userProfile, ...data });
+      await updateDoc(doc(db, 'users', currentUser.uid), publicProfile);
+      setUserProfile({ ...userProfile, ...publicProfile });
       playSound('success');
     } catch (error) {
       playSound('error');
@@ -986,28 +774,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
 
-    let rewardXp = 50;
-    let rewardCoins = 25;
-
-    if (userProfile.perks?.includes('fast_learner')) {
-      rewardXp = Math.floor(rewardXp * 1.1);
-    }
-    if (userProfile.perks?.includes('golden_touch')) {
-      rewardCoins = Math.floor(rewardCoins * 1.1);
-    }
-    const now = new Date();
     try {
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        xp: increment(rewardXp),
-        coins: increment(rewardCoins),
-        lastDailyReward: serverTimestamp()
-      });
-      
-      const newXp = userProfile.xp + rewardXp;
-      const newLevel = Math.floor(newXp / 250) + 1;
-      
-      if (newLevel > userProfile.level) {
-        setLevelUp(newLevel);
+      const reward = await postAuthenticated<{
+        xpReward: number;
+        coinReward: number;
+        xp: number;
+        coins: number;
+        level: number;
+        claimedAt: string;
+      }>('/rewards/daily');
+
+      if (reward.level > userProfile.level) {
+        setLevelUp(reward.level);
         playSound('levelUp');
       } else {
         playSound('success');
@@ -1015,17 +793,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUserProfile({ 
         ...userProfile, 
-        xp: newXp, 
-        level: newLevel,
-        coins: (userProfile.coins || 0) + rewardCoins,
-        lastDailyReward: { toDate: () => now } 
+        xp: reward.xp,
+        level: reward.level,
+        coins: reward.coins,
+        lastDailyReward: reward.claimedAt,
       });
-      toast.success(`Ежедневная награда получена! +${rewardXp} XP, +${rewardCoins} монет 🎁`);
+      toast.success(`Ежедневная награда получена! +${reward.xpReward} XP, +${reward.coinReward} монет 🎁`);
       return true;
-    } catch (error: any) {
+    } catch (error) {
       playSound('error');
-      toast.error(`Ошибка при получении награды: ${error?.message || 'Попробуйте снова'}`);
-      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
+      toast.error(error instanceof Error && error.message === 'Daily reward has already been claimed'
+        ? 'Награда уже получена. Возвращайтесь через 24 часа!'
+        : 'Не удалось получить ежедневную награду.');
       return false;
     }
   }, [currentUser, userProfile, canClaimReward]);
@@ -1283,30 +1062,101 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const completeDailyChallenge = React.useCallback(async (challengeId: string, reward: { xp: number, coins: number }) => {
     if (!currentUser || !userProfile) return;
-    const today = new Date().toDateString();
-    const fullId = `${today}_${challengeId}`;
+    const fullId = `${getDailyChallengeDate()}_${challengeId}`;
     
     if (userProfile.completedDailyChallenges?.includes(fullId)) return;
 
     try {
-      const updatedChallenges = [...(userProfile.completedDailyChallenges || []), fullId];
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        completedDailyChallenges: updatedChallenges,
-        xp: increment(reward.xp),
-        coins: increment(reward.coins)
-      });
-      
+      // Rewards are calculated from the server-side challenge record; never
+      // trust values supplied by a browser.
+      void reward;
+      const result = await postAuthenticated<Pick<UserProfile, 'completedDailyChallenges' | 'xp' | 'coins' | 'level' | 'skillPoints'> & {
+        reward: { xp: number; coins: number };
+      }>('/daily-challenges/complete', { challengeId });
+      const { reward: canonicalReward, ...profileUpdate } = result;
       setUserProfile({
         ...userProfile,
-        completedDailyChallenges: updatedChallenges,
-        xp: userProfile.xp + reward.xp,
-        coins: (userProfile.coins || 0) + reward.coins
+        ...profileUpdate,
       });
       
       playSound('success');
-      toast.success(`Испытание пройдено! +${reward.xp} XP, +${reward.coins} монет`);
+      toast.success(`Испытание пройдено! +${canonicalReward.xp} XP, +${canonicalReward.coins} монет`);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}`);
+    }
+  }, [currentUser, userProfile]);
+
+  const claimArcadeReward = React.useCallback(async (gameId: string) => {
+    if (!currentUser || !userProfile) return false;
+    try {
+      const result = await postAuthenticated<Pick<UserProfile, 'xp' | 'coins' | 'level' | 'skillPoints'> & {
+        reward: { xp: number; coins: number };
+      }>('/arcade/complete', { gameId });
+      const { reward, ...profileUpdate } = result;
+      setUserProfile({ ...userProfile, ...profileUpdate });
+      if (result.level > userProfile.level) setLevelUp(result.level);
+      toast.success(`Аркадная награда: +${reward.xp} XP, +${reward.coins} монет`);
+      return true;
+    } catch (error) {
+      console.error('Arcade reward failed');
+      toast.error('Награда за эту игру уже получена сегодня или пока недоступна.');
+      return false;
+    }
+  }, [currentUser, userProfile]);
+
+  const claimSoloBossReward = React.useCallback(async (bossId: string) => {
+    if (!currentUser || !userProfile) return false;
+    try {
+      const result = await postAuthenticated<Pick<UserProfile, 'xp' | 'coins' | 'level' | 'skillPoints'> & {
+        reward: { xp: number; coins: number };
+      }>('/bosses/complete', { bossId });
+      const { reward, ...profileUpdate } = result;
+      setUserProfile({ ...userProfile, ...profileUpdate });
+      if (result.level > userProfile.level) setLevelUp(result.level);
+      toast.success(`Победа над боссом: +${reward.xp} XP, +${reward.coins} монет`);
+      return true;
+    } catch (error) {
+      console.error('Solo boss reward failed');
+      toast.error('Награда за этого босса уже получена или пока недоступна.');
+      return false;
+    }
+  }, [currentUser, userProfile]);
+
+  const contributeToGlobalBoss = React.useCallback(async (bossId: string) => {
+    if (!currentUser || !userProfile) return null;
+    try {
+      const result = await postAuthenticated<Pick<UserProfile, 'xp' | 'coins' | 'level' | 'skillPoints'> & {
+        damage: number;
+        currentHp: number;
+        reward: { xp: number; coins: number };
+      }>('/bosses/global/contribute', { bossId });
+      const { damage, currentHp, reward, ...profileUpdate } = result;
+      setUserProfile({ ...userProfile, ...profileUpdate });
+      if (result.level > userProfile.level) setLevelUp(result.level);
+      toast.success(`Вклад засчитан: ${damage} урона, +${reward.xp} XP`);
+      return { damage, currentHp };
+    } catch (error) {
+      console.error('Global boss contribution failed');
+      toast.error('Вклад уже засчитан или босс больше недоступен.');
+      return null;
+    }
+  }, [currentUser, userProfile]);
+
+  const claimTournamentReward = React.useCallback(async (tournamentId: string) => {
+    if (!currentUser || !userProfile) return false;
+    try {
+      const result = await postAuthenticated<Pick<UserProfile, 'xp' | 'coins' | 'level' | 'skillPoints'> & {
+        reward: { xp: number; coins: number };
+      }>('/tournaments/complete', { tournamentId });
+      const { reward, ...profileUpdate } = result;
+      setUserProfile({ ...userProfile, ...profileUpdate });
+      if (result.level > userProfile.level) setLevelUp(result.level);
+      toast.success(`Турнир завершён: +${reward.xp} XP, +${reward.coins} монет`);
+      return true;
+    } catch (error) {
+      console.error('Tournament reward failed');
+      toast.error('Награда уже получена или пока недоступна.');
+      return false;
     }
   }, [currentUser, userProfile]);
 
@@ -1404,9 +1254,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
-  const useItem = React.useCallback(async (inventoryId: string) => {
+  const useItem = React.useCallback(async (inventoryId: string, asPetFood = false) => {
     if (!userProfile || !currentUser) return;
-    
+
+    try {
+      const result = await postAuthenticated<{
+        inventory: InventoryItem[];
+        stats?: UserProfile['stats'];
+        pet?: UserProfile['pet'];
+        xp?: number;
+        level?: number;
+        skillPoints?: number;
+        message: string;
+      }>('/inventory/use', { inventoryId, asPetFood });
+      const profileUpdate: Partial<UserProfile> = { inventory: result.inventory };
+      if (result.stats) profileUpdate.stats = result.stats;
+      if (result.pet) profileUpdate.pet = result.pet;
+      if (typeof result.xp === 'number') profileUpdate.xp = result.xp;
+      if (typeof result.level === 'number') profileUpdate.level = result.level;
+      if (typeof result.skillPoints === 'number') profileUpdate.skillPoints = result.skillPoints;
+      setUserProfile({ ...userProfile, ...profileUpdate });
+      if (typeof result.level === 'number' && result.level > userProfile.level) setLevelUp(result.level);
+      toast.success(result.message);
+      playSound('levelUp');
+      return { message: result.message };
+    } catch (error) {
+      console.error('Inventory use failed');
+      toast.error('Этот предмет нельзя использовать сейчас.');
+      return null;
+    }
+
+    /* Legacy client-side effect table retained temporarily below for reference.
+       It is unreachable: canonical consumption and rewards run above.
     const invItem = userProfile.inventory.find(i => i.id === inventoryId);
     if (!invItem) return;
     const itemId = invItem.itemId;
@@ -1537,8 +1416,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       toast.success(message);
       const { playSound } = await import('../utils/sounds');
       playSound('levelUp');
+    } */
+  }, [userProfile, currentUser]);
+
+  const customizePet = React.useCallback(async (changes: Pick<NonNullable<UserProfile['pet']>, 'name' | 'type' | 'customPixels'>) => {
+    if (!currentUser || !userProfile) return false;
+    try {
+      const result = await postAuthenticated<{ pet: NonNullable<UserProfile['pet']> }>('/pet/customize', changes);
+      setUserProfile({ ...userProfile, pet: result.pet });
+      return true;
+    } catch (error) {
+      console.error('Pet customization failed');
+      toast.error('Не удалось сохранить настройки питомца.');
+      return false;
     }
-  }, [userProfile, currentUser, updateQuestProgress, updateProfile]);
+  }, [currentUser, userProfile]);
+
+  const trainPet = React.useCallback(async (stat: 'logic' | 'speed' | 'power') => {
+    if (!currentUser || !userProfile) return false;
+    try {
+      const result = await postAuthenticated<{ coins: number; pet: NonNullable<UserProfile['pet']> }>('/pet/train', { stat });
+      setUserProfile({ ...userProfile, coins: result.coins, pet: result.pet });
+      return true;
+    } catch (error) {
+      console.error('Pet training failed');
+      toast.error('Не удалось прокачать питомца.');
+      return false;
+    }
+  }, [currentUser, userProfile]);
+
+  const unlockPerk = React.useCallback(async (perkId: string) => {
+    if (!currentUser || !userProfile) return false;
+    try {
+      const result = await postAuthenticated<Pick<UserProfile, 'perks' | 'skillPoints' | 'stats'>>('/perks/unlock', { perkId });
+      setUserProfile({ ...userProfile, ...result });
+      return true;
+    } catch (error) {
+      console.error('Perk unlock failed');
+      toast.error('Навык нельзя разблокировать: проверьте требования и очки навыков.');
+      return false;
+    }
+  }, [currentUser, userProfile]);
 
   const value = React.useMemo(() => ({
     currentUser,
@@ -1548,10 +1466,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     register,
     loginWithGoogle,
     logout,
-    addXp,
-    addCoins,
-    subtractCoins,
-    subtractXp,
+    payShopRefresh,
+    claimArcadeReward,
+    claimSoloBossReward,
+    contributeToGlobalBoss,
+    claimTournamentReward,
     completeLesson,
     updateProfile,
     claimDailyReward,
@@ -1591,13 +1510,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveSubmission,
     getSubmissions,
     useItem,
+    customizePet,
+    trainPet,
+    unlockPerk,
     performanceSettings,
     setLowPerfMode,
     adminCompleteQuest,
     adminCompleteAllQuests,
   }), [
     currentUser, userProfile, loading, login, register, loginWithGoogle, logout,
-    addXp, addCoins, subtractCoins, subtractXp, completeLesson, updateProfile,
+    payShopRefresh, claimArcadeReward, claimSoloBossReward,
+    contributeToGlobalBoss, claimTournamentReward, completeLesson, updateProfile,
     claimDailyReward, buyItem, quickSellItem, listMarketplaceItem, buyMarketplaceItem,
     getMarketplaceListings, isAdmin, adminAddCoins, adminUpdateUserStats,
     adminGiveItem, adminCompleteLesson, adminUnlockAllLessons, adminSetLevel,
@@ -1605,7 +1528,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     cancelTradeRequest, getTradeRequests, searchUsers, updateQuestProgress,
     levelUp, resetLevelUp, calculateRank, canClaimReward, lastCodeResult,
     currentCode, currentChallenge, completeDailyChallenge, adminSpawnBoss,
-    saveSubmission, getSubmissions, useItem, 
+    saveSubmission, getSubmissions, useItem, customizePet, trainPet, unlockPerk,
     performanceSettings, setLowPerfMode,
     adminCompleteQuest, adminCompleteAllQuests
   ]);

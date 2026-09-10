@@ -70,7 +70,7 @@ const BOSSES: Boss[] = [
 ];
 
 export const BossArena = () => {
-  const { userProfile, addXp, addCoins, subtractCoins, subtractXp } = useAuth();
+  const { claimSoloBossReward, contributeToGlobalBoss } = useAuth();
   const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
   const [activeGlobalBosses, setActiveGlobalBosses] = useState<GlobalBoss[]>([]);
   const [activeGlobalBoss, setActiveGlobalBoss] = useState<GlobalBoss | null>(null);
@@ -116,15 +116,11 @@ export const BossArena = () => {
 
   const handleSuccess = async () => {
     if (isGlobalFight && activeGlobalBoss) {
-      let damage = 20; 
-      if (userProfile?.perks?.includes('boss_slayer')) {
-        damage = Math.floor(damage * 1.3);
-      }
-      await BossService.dealDamage(activeGlobalBoss.id, damage);
+      const contribution = await contributeToGlobalBoss(activeGlobalBoss.id);
+      if (!contribution) return;
       playSound('success');
-      setBattleLog(prev => [...prev, `ВЫ НАНЕСЛИ ${damage} УРОНА ГЛОБАЛЬНОМУ БОССУ!`]);
-      toast.success(`Урон нанесен! +50 XP вне вклада.`);
-      await addXp(50);
+      setBossHp(contribution.currentHp);
+      setBattleLog(prev => [...prev, `ВЫ НАНЕСЛИ ${contribution.damage} УРОНА ГЛОБАЛЬНОМУ БОССУ!`]);
       setIsFighting(false);
       setIsGlobalFight(false);
       setActiveGlobalBoss(null);
@@ -138,8 +134,7 @@ export const BossArena = () => {
     setBossHp(0);
     
     setTimeout(async () => {
-      await addXp(selectedBoss.reward.xp);
-      await addCoins(selectedBoss.reward.coins);
+      await claimSoloBossReward(selectedBoss.id);
       setIsFighting(false);
       setSelectedBoss(null);
       playSound('levelUp');
@@ -153,9 +148,7 @@ export const BossArena = () => {
     setBattleLog(prev => [...prev, `${selectedBoss.name} одолел вас...`]);
     setUserHp(0);
     
-    setTimeout(async () => {
-      await subtractXp(selectedBoss.penalty.xp);
-      await subtractCoins(selectedBoss.penalty.coins);
+    setTimeout(() => {
       setIsFighting(false);
       setSelectedBoss(null);
     }, 2000);

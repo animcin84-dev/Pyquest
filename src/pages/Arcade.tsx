@@ -115,7 +115,7 @@ const TRIVIA_QUESTIONS = [
 ];
 
 export const Arcade = () => {
-  const { addXp } = useAuth();
+  const { claimArcadeReward } = useAuth();
   const [activeGame, setActiveGame] = useState<'pyarcade' | 'speedtyper' | 'logicgates' | 'syntaxmatch' | 'snake' | 'debugrush' | 'predictor' | 'duel' | 'sandbox' | 'regexracer' | 'algoascent' | 'triviachase'>('pyarcade');
   const [isSwitching, setIsSwitching] = useState(false);
 
@@ -260,7 +260,7 @@ export const Arcade = () => {
           if (cards.filter(c => c.isMatched).length === cards.length - 2) {
             setMatchGameOver(true);
             playSound('levelUp');
-            addXp(120); 
+            void claimArcadeReward('syntaxmatch');
           }
         }, 500);
       } else {
@@ -294,7 +294,7 @@ export const Arcade = () => {
       } else {
         setLogicGameOver(true);
         playSound('levelUp');
-        addXp(logicScore + (isCorrect ? 10 : 0));
+        void claimArcadeReward('logicgates');
       }
     }, 500);
   };
@@ -327,7 +327,7 @@ export const Arcade = () => {
       } else {
         setDebugGameOver(true);
         playSound('levelUp');
-        addXp(debugScore + (isCorrect ? 25 : 0));
+        void claimArcadeReward('debugrush');
       }
     }, 800);
   };
@@ -360,7 +360,7 @@ export const Arcade = () => {
       } else {
         setPredictGameOver(true);
         playSound('levelUp');
-        addXp(predictScore + (isCorrect ? 30 : 0));
+        void claimArcadeReward('predictor');
       }
     }, 800);
   };
@@ -381,7 +381,7 @@ export const Arcade = () => {
     setTimeout(() => {
       setRegexFlash(null);
       if (regexIndex < REGEX_QUESTIONS.length - 1) setRegexIndex(s => s + 1);
-      else { setRegexGameOver(true); playSound('levelUp'); addXp(regexScore + (isCorrect ? 40 : 0)); }
+      else { setRegexGameOver(true); playSound('levelUp'); void claimArcadeReward('regexracer'); }
     }, 800);
   };
 
@@ -393,7 +393,7 @@ export const Arcade = () => {
     setTimeout(() => {
       setAlgoFlash(null);
       if (algoIndex < ALGO_QUESTIONS.length - 1) setAlgoIndex(s => s + 1);
-      else { setAlgoGameOver(true); playSound('levelUp'); addXp(algoScore + (isCorrect ? 50 : 0)); }
+      else { setAlgoGameOver(true); playSound('levelUp'); void claimArcadeReward('algoascent'); }
     }, 800);
   };
 
@@ -405,7 +405,7 @@ export const Arcade = () => {
     setTimeout(() => {
       setTriviaFlash(null);
       if (triviaIndex < TRIVIA_QUESTIONS.length - 1) setTriviaIndex(s => s + 1);
-      else { setTriviaGameOver(true); playSound('levelUp'); addXp(triviaScore + (isCorrect ? 20 : 0)); }
+      else { setTriviaGameOver(true); playSound('levelUp'); void claimArcadeReward('triviachase'); }
     }, 800);
   };
 
@@ -546,7 +546,7 @@ export const Arcade = () => {
         setGameWon(true);
         playSound('levelUp');
         setOutput(prev => [...prev, '> SUCCESS: All gems collected!']);
-        addXp(currentScore);
+        void claimArcadeReward('pyarcade');
         break;
       }
     }
@@ -578,7 +578,7 @@ export const Arcade = () => {
       setWpm(calculatedWpm);
       setTyperFinished(true);
       playSound('levelUp');
-      addXp(calculatedWpm); 
+      void claimArcadeReward('speedtyper');
     }
   };
 
@@ -1392,7 +1392,7 @@ const PythonSnakeGame = () => {
   const [snakeFlash, setSnakeFlash] = useState<'error' | null>(null);
   const [command, setCommand] = useState("");
   const [logs, setLogs] = useState<string[]>(["Система готова. Введите команду для змейки."]);
-  const { addXp } = useAuth();
+  const { claimArcadeReward } = useAuth();
 
   const gridSize = 20;
 
@@ -1432,7 +1432,7 @@ const PythonSnakeGame = () => {
         setSnakeFlash('error');
         playSound('error');
         setTimeout(() => setSnakeFlash(null), 500);
-        addXp(score);
+        void claimArcadeReward('snake');
         return;
       }
 

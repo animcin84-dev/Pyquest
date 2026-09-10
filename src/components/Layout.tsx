@@ -562,6 +562,7 @@ export const Navbar = () => {
                     placeholder="например, CodeNinja99"
                     required
                     minLength={3}
+                    maxLength={24}
                   />
                 </div>
                 <div>

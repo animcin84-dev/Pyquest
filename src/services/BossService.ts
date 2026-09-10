@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { doc, getDoc, updateDoc, increment, onSnapshot, setDoc, serverTimestamp, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { BOSS_TEMPLATES, BossTemplate } from '../constants/bosses';
 
 export interface GlobalBoss extends BossTemplate {
@@ -16,14 +16,6 @@ export const BossService = {
     });
   },
 
-  dealDamage: async (bossId: string, amount: number) => {
-    const bossRef = doc(db, 'active_bosses', bossId);
-    await updateDoc(bossRef, {
-      currentHp: increment(-amount)
-    });
-  },
-
-  
   rotateBosses: async () => {
     const weekNumber = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
     const startIdx = (weekNumber * 5) % BOSS_TEMPLATES.length;

@@ -8,7 +8,7 @@ import { ALL_ITEMS } from '../pages/Shop';
 import { getMentorHint } from '../services/gemini';
 
 export const PetCompanion = React.memo(() => {
-  const { userProfile, updateProfile, updateQuestProgress, lastCodeResult, currentCode, currentChallenge } = useAuth();
+  const { userProfile, lastCodeResult, currentCode, currentChallenge, useItem, customizePet, trainPet } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -64,29 +64,12 @@ export const PetCompanion = React.memo(() => {
       return;
     }
 
-    const baseCost = 50;
-    const petLevel = pet.level || 0;
-    const finalCost = petLevel >= 10 ? Math.floor(baseCost / 2) : baseCost;
-
-    if ((userProfile?.coins || 0) < finalCost) {
-      playSound('error');
-      setMessage(`Недостаточно монет! Подсказка стоит ${finalCost} монет.`);
-      return;
-    }
-    
     setIsMentorLoading(true);
     setMentorHint('');
     try {
       const hint = await getMentorHint(currentCode, currentChallenge);
       setMentorHint(hint);
-      await updateProfile({ coins: (userProfile?.coins || 0) - finalCost });
-      
-      if (petLevel >= 10) {
-        toast.success(`Аура Логики! Подсказка за ${finalCost} монет (скидка 50%)`, { icon: '🧠' });
-      } else {
-        toast.info(`Списано ${finalCost} монет за подсказку`);
-      }
-      
+      toast.info('Питомец запросил подсказку у ИИ-ментора.', { icon: '🧠' });
       playSound('success');
     } catch (err) {
       setMessage('Ой, мой ИИ-модуль перегрелся. Попробуй позже!');
@@ -119,12 +102,8 @@ export const PetCompanion = React.memo(() => {
 
   const savePixels = async () => {
     try {
-      await updateProfile({
-        pet: {
-          ...pet,
-          customPixels: pixels
-        }
-      });
+      const saved = await customizePet({ name: pet.name, type: pet.type, customPixels: pixels });
+      if (!saved) return;
       setIsDrawing(false);
       playSound('success');
       setMessage('Рисунок сохранен!');
@@ -136,46 +115,10 @@ export const PetCompanion = React.memo(() => {
 
   const handleFeed = async (item: InventoryItem) => {
     if (!userProfile) return;
-
-    const newInventory = (userProfile.inventory || []).filter(i => i.id !== item.id);
-    const itemId = item.itemId;
-    const itemName = item.name;
-
-    
-    let statBoost = { logic: 1, speed: 1, power: 1, intellect: 1 };
-    if (itemId.includes('burger')) statBoost = { logic: 0, speed: 0, power: 5, intellect: 0 };
-    if (itemId.includes('pizza')) statBoost = { logic: 2, speed: 0, power: 3, intellect: 0 };
-    if (itemId.includes('apple')) statBoost = { logic: 5, speed: 0, power: 0, intellect: 0 };
-    if (itemId.includes('coffee')) statBoost = { logic: 0, speed: 5, power: 0, intellect: 0 };
-    if (itemId.includes('energy')) statBoost = { logic: 0, speed: 8, power: 0, intellect: 0 };
-    if (itemId.includes('brain')) statBoost = { logic: 0, speed: 0, power: 0, intellect: 8 };
-    if (itemId === 'bit_bot_food') {
-      const stats: ('logic'|'speed'|'power'|'intellect')[] = ['logic', 'speed', 'power', 'intellect'];
-      const randomStat = stats[Math.floor(Math.random() * stats.length)];
-      statBoost = { logic: 0, speed: 0, power: 0, intellect: 0, [randomStat]: 10 };
-    }
-
-    const updatedPet = {
-      ...pet,
-      level: pet.level + 1,
-      stats: {
-        logic: (pet.stats.logic || 10) + statBoost.logic,
-        speed: (pet.stats.speed || 10) + statBoost.speed,
-        power: (pet.stats.power || 10) + statBoost.power,
-        intellect: (pet.stats.intellect || 10) + statBoost.intellect
-      },
-      lastFed: Date.now()
-    };
-
-    await updateProfile({
-      inventory: newInventory,
-      pet: updatedPet
-    });
-
-    updateQuestProgress('pet_feed');
+    const result = await useItem(item.id, true);
+    if (!result) return;
     setIsFeeding(false);
-    playSound('levelUp');
-    setMessage(`Вкусно! ${itemName.toUpperCase()} дал бонусы к статам!`);
+    setMessage(result.message);
   };
 
   const foodItems = (userProfile?.inventory || []).filter(item => 
@@ -201,18 +144,8 @@ export const PetCompanion = React.memo(() => {
       return;
     }
 
-    const updatedPet = {
-      ...pet,
-      stats: {
-        ...pet.stats,
-        [stat]: pet.stats[stat] + 1
-      }
-    };
-
-    await updateProfile({
-      coins: (userProfile?.coins || 0) - 50,
-      pet: updatedPet
-    });
+    const trained = await trainPet(stat);
+    if (!trained) return;
     
     playSound('levelUp');
     setMessage(`${stat.toUpperCase()} повышена!`);
@@ -320,7 +253,7 @@ export const PetCompanion = React.memo(() => {
                     {petTypes.map(type => (
                       <button
                         key={type.id}
-                        onClick={() => updateProfile({ pet: { ...pet, type: type.id } })}
+                        onClick={() => { void customizePet({ name: pet.name, type: type.id, customPixels: pet.customPixels }); }}
                         className={`p-3 rounded-2xl border transition-all ${pet.type === type.id ? 'bg-brand-primary/20 border-brand-primary' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
                         title={type.name}
                       >
@@ -334,7 +267,7 @@ export const PetCompanion = React.memo(() => {
                       <input 
                         type="text"
                         value={pet.type.startsWith('emoji:') ? pet.type.replace('emoji:', '') : ''}
-                        onChange={(e) => updateProfile({ pet: { ...pet, type: `emoji:${e.target.value}` } })}
+                        onChange={(e) => { void customizePet({ name: pet.name, type: `emoji:${e.target.value}`, customPixels: pet.customPixels }); }}
                         className="flex-grow bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-brand-primary"
                         placeholder="Введите эмодзи..."
                         maxLength={2}
@@ -349,7 +282,7 @@ export const PetCompanion = React.memo(() => {
                     <input 
                       type="text"
                       value={pet.name}
-                      onChange={(e) => updateProfile({ pet: { ...pet, name: e.target.value } })}
+                        onChange={(e) => { void customizePet({ name: e.target.value, type: pet.type, customPixels: pet.customPixels }); }}
                       className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-brand-primary"
                       placeholder="Имя питомца"
                     />

@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0687485249",
-  "appId": "1:629244282277:web:84e6ea398a8c41772dd44c",
-  "apiKey": "AIzaSyDpgjHOJFdQ6JODR6zkb2L6FNVlcunmKcI",
-  "authDomain": "gen-lang-client-0687485249.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-a79184a6-dc4c-453f-ab4b-61aeec5cee74",
-  "storageBucket": "gen-lang-client-0687485249.firebasestorage.app",
-  "messagingSenderId": "629244282277",
+  "projectId": "pyquest-animcin84-2026",
+  "appId": "1:1085846862956:web:884b728d522a6191502c49",
+  "apiKey": "AIzaSyDQyo0hQbZG2M311kJP60giXa53GaWkGnY",
+  "authDomain": "pyquest-animcin84-2026.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "pyquest-animcin84-2026.firebasestorage.app",
+  "messagingSenderId": "1085846862956",
   "measurementId": ""
 }

@@ -68,7 +68,7 @@ const TIPS = [
 export const Sandbox = React.memo(() => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { updateQuestProgress } = useAuth();
+  const { currentUser, updateQuestProgress } = useAuth();
   const [code, setCode] = useState(EXAMPLES[0].code);
   const [copied, setCopied] = useState(false);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
@@ -76,22 +76,38 @@ export const Sandbox = React.memo(() => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    socketRef.current = io();
-    const socket = socketRef.current;
+    if (!id || !currentUser) return;
+    let disposed = false;
+    let socket: Socket | null = null;
 
-    if (id) {
+    const connect = async () => {
+      const token = await currentUser.getIdToken();
+      if (disposed) return;
+      socket = io(window.location.origin, { auth: { token } });
+      socketRef.current = socket;
       socket.emit('join_room', { roomId: id, type: 'sandbox' });
-      (socket as any).on('user_joined', ({ count }: { count: number }) => {
+      socket.on('user_joined', ({ count }: { count: number }) => {
         setUsersCount(count);
         toast.info('Новый пользователь присоединился к сессии');
       });
-      (socket as any).on('remote_update', ({ code: newCode }: { code: string }) => {
+      socket.on('remote_update', ({ code: newCode }: { code: string }) => {
         setCode(newCode);
       });
-    }
+      socket.on('connect_error', () => {
+        toast.error('Не удалось безопасно подключиться к совместной сессии.');
+      });
+    };
 
-    return () => { socket.disconnect(); };
-  }, [id]);
+    void connect().catch(() => {
+      if (!disposed) toast.error('Не удалось получить токен для совместной сессии.');
+    });
+
+    return () => {
+      disposed = true;
+      socketRef.current = null;
+      socket?.disconnect();
+    };
+  }, [currentUser, id]);
 
   const handleCodeChange = React.useCallback((newCode: string) => {
     setCode(newCode);
@@ -119,7 +135,7 @@ export const Sandbox = React.memo(() => {
   }, []);
 
   const createSession = React.useCallback(() => {
-    const sessionId = Math.random().toString(36).substring(7);
+    const sessionId = crypto.randomUUID();
     navigate(`/sandbox/${sessionId}`);
     toast.success('Сессия создана! Поделись ссылкой с друзьями.');
   }, [navigate]);
@@ -293,5 +309,4 @@ export const Sandbox = React.memo(() => {
     </div>
   );
 });
-
 

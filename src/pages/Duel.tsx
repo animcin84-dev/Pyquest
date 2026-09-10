@@ -1,74 +1,150 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Swords, Trophy, Skull, Star, Code2, Play, RotateCcw, Terminal, Zap, Shield, Heart, User, Search, Loader2 } from 'lucide-react';
-import { Navbar } from '../components/Layout';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
+import { Swords, Trophy, Skull, Code2, Terminal, User, Search, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { playSound } from '../utils/sounds';
 import { TextReveal } from '../components/TextReveal';
 import { io, Socket } from 'socket.io-client';
+import { CodeEditor } from '../components/CodeEditor';
+import { toast } from 'sonner';
+
+interface DuelChallenge {
+  id: string;
+  title: string;
+  description: string;
+  reward: number;
+  initialCode: string;
+  testCases: { description: string; assertCode: string; inputValues: string[] }[];
+}
+
+const DUEL_CHALLENGES: DuelChallenge[] = [
+  {
+    id: 'duel_1',
+    title: 'Быстрый принт',
+    description: 'Напишите solve(), которая возвращает три строки Python через перенос строки.',
+    reward: 100,
+    initialCode: "def solve():\n    # Верните три строки Python\n    pass",
+    testCases: [{ description: 'Три строки Python', inputValues: [], assertCode: "assert solve() == 'Python\\nPython\\nPython'" }]
+  },
+  {
+    id: 'duel_2',
+    title: 'Математик',
+    description: 'Напишите solve(), которая возвращает сумму чисел от 1 до 10.',
+    reward: 150,
+    initialCode: "def solve():\n    # Верните сумму от 1 до 10\n    pass",
+    testCases: [{ description: 'Сумма равна 55', inputValues: [], assertCode: 'assert solve() == 55' }]
+  },
+  {
+    id: 'duel_3',
+    title: 'Список героев',
+    description: 'Напишите solve(), которая возвращает длину списка Python, Java и C++.',
+    reward: 200,
+    initialCode: "def solve():\n    heroes = ['Python', 'Java', 'C++']\n    # Верните длину списка\n    pass",
+    testCases: [{ description: 'Длина списка равна 3', inputValues: [], assertCode: 'assert solve() == 3' }]
+  }
+];
 
 export const Duel = () => {
-  const { userProfile, addXp, updateQuestProgress } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [duelStarted, setDuelStarted] = useState(false);
   const [opponent, setOpponent] = useState<{ id: string, username: string } | null>(null);
-  const [playerCode, setPlayerCode] = useState("def solve():\n    # Твой код здесь\n    pass");
+  const [activeDuel, setActiveDuel] = useState<DuelChallenge | null>(null);
   const [opponentCode, setOpponentCode] = useState("");
   const [timeLeft, setTimeLeft] = useState(60);
   const [duelResult, setDuelResult] = useState<'win' | 'loss' | 'draw' | null>(null);
 
   useEffect(() => {
-    const newSocket = io(window.location.origin);
-    setSocket(newSocket);
+    if (!currentUser) {
+      setSocket(null);
+      return;
+    }
+    let disposed = false;
+    let newSocket: Socket | null = null;
 
-    newSocket.on("duel_start", ({ players }) => {
-      const oppId = players.find((id: string) => id !== newSocket.id);
-      setOpponent({ id: oppId, username: "Игрок " + oppId.slice(0, 4) });
-      setDuelStarted(true);
-      setIsSearching(false);
-      playSound('levelUp');
-    });
+    const connect = async () => {
+      const token = await currentUser.getIdToken();
+      if (disposed) return;
+      newSocket = io(window.location.origin, { auth: { token } });
+      setSocket(newSocket);
 
-    newSocket.on("opponent_code", (code: string) => {
-      setOpponentCode(code);
-    });
+      newSocket.on("duel_start", ({ roomId: matchedRoomId, players, challengeIndex }) => {
+        const oppId = players.find((id: string) => id !== newSocket?.id);
+        if (!oppId) return;
+        setOpponent({ id: oppId, username: "Игрок " + oppId.slice(0, 4) });
+        setRoomId(matchedRoomId);
+        setActiveDuel(DUEL_CHALLENGES[challengeIndex] || DUEL_CHALLENGES[0]);
+        setTimeLeft(60);
+        setDuelStarted(true);
+        setIsSearching(false);
+        playSound('levelUp');
+      });
 
-    newSocket.on("duel_event", ({ playerId, action }) => {
-      if (action === 'finish') {
-        const result = playerId === newSocket.id ? 'win' : 'loss';
-        setDuelResult(result);
-        setDuelStarted(false);
-        updateQuestProgress('duel');
-        if (result === 'win') {
-          addXp(150);
-          updateQuestProgress('duel_win');
-          playSound('success');
-        } else {
-          playSound('error');
+      newSocket.on("duel_waiting", () => setIsSearching(true));
+
+      newSocket.on("opponent_code", (code: string) => {
+        setOpponentCode(code);
+      });
+
+      newSocket.on("duel_event", ({ playerId, action }) => {
+        if (action === 'finish' || action === 'timeout' || action === 'opponent_left') {
+          const result = action === 'opponent_left'
+            ? 'win'
+            : action === 'finish'
+              ? (playerId === newSocket?.id ? 'win' : 'loss')
+              : (playerId === newSocket?.id ? 'loss' : 'win');
+          setDuelResult(result);
+          setDuelStarted(false);
+          if (result === 'win') {
+            playSound('success');
+          } else {
+            playSound('error');
+          }
         }
-      }
+      });
+
+      newSocket.on('connect_error', () => {
+        setIsSearching(false);
+        toast.error('Не удалось безопасно подключиться к дуэли. Войдите в аккаунт и попробуйте снова.');
+      });
+    };
+
+    void connect().catch(() => {
+      if (!disposed) toast.error('Не удалось получить безопасный токен для дуэли.');
     });
 
     return () => {
-      newSocket.disconnect();
+      disposed = true;
+      newSocket?.disconnect();
     };
-  }, []);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!duelStarted || duelResult || !socket || !roomId) return;
+
+    const timer = window.setInterval(() => {
+      setTimeLeft(previous => {
+        if (previous <= 1) {
+          socket.emit("duel_action", { roomId, action: 'timeout' });
+          return 0;
+        }
+        return previous - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [duelStarted, duelResult, roomId, socket]);
 
   const startSearch = () => {
     if (!socket) return;
     setIsSearching(true);
     playSound('click');
-    
-    const id = "duel_room_1"; 
-    setRoomId(id);
-    socket.emit("join_duel", id);
+    socket.emit("find_duel");
   };
 
-  const handleCodeChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newCode = e.target.value;
-    setPlayerCode(newCode);
+  const handleCodeChange = (newCode: string) => {
     if (socket && roomId) {
       socket.emit("code_update", { roomId, code: newCode });
     }
@@ -132,23 +208,23 @@ export const Duel = () => {
                 <div className="bg-black/40 px-8 py-4 border-b border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Code2 className="w-4 h-4 text-green-400" />
-                    <span className="text-xs font-bold text-white/70 tracking-widest uppercase">main.py</span>
+                    <span className="text-xs font-bold text-white/70 tracking-widest uppercase">{activeDuel?.title || 'Задание'}</span>
                   </div>
                 </div>
-                <textarea
-                  value={playerCode}
-                  onChange={handleCodeChange}
-                  className="flex-grow w-full bg-transparent p-8 font-mono text-lg text-green-400 focus:outline-none resize-none"
-                  spellCheck="false"
-                />
-                <div className="p-6 bg-black/40 border-t border-white/5">
-                  <button
-                    onClick={finishDuel}
-                    className="w-full py-4 bg-green-500 hover:bg-green-400 text-black rounded-2xl font-bold text-xl transition-all shadow-[0_0_20px_rgba(34,197,94,0.3)]"
-                  >
-                    Завершить решение
-                  </button>
+                <div className="p-6 border-b border-white/5 text-white/60 text-sm leading-relaxed">
+                  {activeDuel?.description}
                 </div>
+                {activeDuel && (
+                  <div className="p-4">
+                    <CodeEditor
+                      initialCode={activeDuel.initialCode}
+                      testCases={activeDuel.testCases as any}
+                      lessonId={`duel_${activeDuel.id}`}
+                      onChange={handleCodeChange}
+                      onSuccess={finishDuel}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -191,7 +267,7 @@ export const Duel = () => {
               {duelResult === 'win' ? <Trophy className="w-20 h-20" /> : <Skull className="w-20 h-20" />}
             </motion.div>
             <h2 className="text-6xl font-display font-bold mb-4">{duelResult === 'win' ? 'ПОБЕДА!' : 'ПОРАЖЕНИЕ'}</h2>
-            <p className="text-white/60 text-2xl mb-12">{duelResult === 'win' ? 'Вы доказали свое превосходство в коде! +150 XP' : 'Противник оказался быстрее. Не сдавайся!'}</p>
+            <p className="text-white/60 text-2xl mb-12">{duelResult === 'win' ? 'Вы доказали свое превосходство в коде!' : 'Противник оказался быстрее. Не сдавайся!'}</p>
             
             <button
               onClick={() => { setDuelResult(null); setDuelStarted(false); }}

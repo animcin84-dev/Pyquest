@@ -1,6 +1,7 @@
-import { collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, serverTimestamp, arrayUnion, arrayRemove, onSnapshot, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, onSnapshot, limit } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { toast } from 'sonner';
+import { postAuthenticated } from './serverApi';
 
 export interface FriendRequest {
   id: string;
@@ -30,71 +31,23 @@ export const SocialService = {
   sendFriendRequest: async (targetUserId: string, targetUsername: string) => {
     if (!auth.currentUser) throw new Error('Not authenticated');
     if (targetUserId === auth.currentUser.uid) throw new Error('Вы не можете добавить себя в друзья');
-
-    
-    const myDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-    const myData = myDoc.data();
-    if (myData?.friends?.includes(targetUserId)) throw new Error('Вы уже друзья');
-
-    
-    const reqQ1 = query(collection(db, 'friend_requests'), 
-      where('senderId', '==', auth.currentUser.uid), 
-      where('receiverId', '==', targetUserId),
-      where('status', '==', 'pending')
-    );
-    const reqSnap1 = await getDocs(reqQ1);
-    if (!reqSnap1.empty) throw new Error('Запрос уже отправлен');
-
-    const reqQ2 = query(collection(db, 'friend_requests'), 
-      where('senderId', '==', targetUserId), 
-      where('receiverId', '==', auth.currentUser.uid),
-      where('status', '==', 'pending')
-    );
-    const reqSnap2 = await getDocs(reqQ2);
-    if (!reqSnap2.empty) throw new Error('Этот пользователь уже отправил вам запрос');
-
-    
-    const newReqRef = doc(collection(db, 'friend_requests'));
-    await setDoc(newReqRef, {
-      id: newReqRef.id,
-      senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || myData?.username || 'Unknown',
-      receiverId: targetUserId,
-      status: 'pending',
-      createdAt: serverTimestamp()
-    });
+    await postAuthenticated('/friends/requests', { receiverId: targetUserId });
 
     toast.success(`Запрос в друзья пользователю ${targetUsername} отправлен!`);
   },
 
   acceptRequest: async (requestId: string, senderId: string) => {
-    if (!auth.currentUser) return;
-    const reqRef = doc(db, 'friend_requests', requestId);
-    await updateDoc(reqRef, { status: 'accepted' });
-
-    
-    const myRef = doc(db, 'users', auth.currentUser.uid);
-    const senderRef = doc(db, 'users', senderId);
-
-    await updateDoc(myRef, { friends: arrayUnion(senderId) });
-    await updateDoc(senderRef, { friends: arrayUnion(auth.currentUser.uid) });
-    
+    void senderId;
+    await postAuthenticated('/friends/requests/accept', { requestId });
     toast.success('Заявка в друзья принята!');
   },
 
   declineRequest: async (requestId: string) => {
-    const reqRef = doc(db, 'friend_requests', requestId);
-    await updateDoc(reqRef, { status: 'declined' });
+    await postAuthenticated('/friends/requests/decline', { requestId });
   },
 
   removeFriend: async (friendId: string) => {
-    if (!auth.currentUser) return;
-    const myRef = doc(db, 'users', auth.currentUser.uid);
-    const friendRef = doc(db, 'users', friendId);
-
-    await updateDoc(myRef, { friends: arrayRemove(friendId) });
-    await updateDoc(friendRef, { friends: arrayRemove(auth.currentUser.uid) });
-    
+    await postAuthenticated('/friends/remove', { friendId });
     toast.info('Пользователь удален из друзей.');
   },
 

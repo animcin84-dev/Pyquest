@@ -8,13 +8,17 @@ import { playSound } from '../utils/sounds';
 import { toast } from 'sonner';
 
 export const SkillTree = React.memo(() => {
-  const { userProfile, updateProfile } = useAuth();
+  const { userProfile, unlockPerk } = useAuth();
   const [selectedPerk, setSelectedPerk] = useState<Perk | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [activeBranch, setActiveBranch] = useState<string>('all');
 
   const userPerks = userProfile?.perks || [];
   const skillPoints = userProfile?.skillPoints || 0;
+  const getStatValue = React.useCallback(
+    (stat: string) => (userProfile?.stats as Record<string, number> | undefined)?.[stat] ?? 0,
+    [userProfile?.stats]
+  );
 
   const branches = [
     { id: 'all', label: 'Все Навыки', icon: Brain },
@@ -42,7 +46,7 @@ export const SkillTree = React.memo(() => {
     }
 
     
-    const missingReq = perk.requirements.find(req => (userProfile.stats as any)[req.stat] < req.min);
+    const missingReq = perk.requirements.find(req => getStatValue(req.stat) < req.min);
     if (missingReq) {
       toast.error(`Требуется ${missingReq.stat.toUpperCase()} уровня ${missingReq.min}!`);
       return;
@@ -50,10 +54,7 @@ export const SkillTree = React.memo(() => {
 
     setIsPurchasing(true);
     try {
-      await updateProfile({
-        perks: [...userPerks, perk.id],
-        skillPoints: skillPoints - perk.cost
-      });
+      if (!(await unlockPerk(perk.id))) return;
       toast.success(`Навык "${perk.name}" разблокирован!`);
       playSound('levelUp');
     } catch (error) {
@@ -62,7 +63,7 @@ export const SkillTree = React.memo(() => {
     } finally {
       setIsPurchasing(false);
     }
-  }, [userProfile, userPerks, skillPoints, updateProfile]);
+  }, [getStatValue, userProfile, userPerks, skillPoints, unlockPerk]);
 
   return (
     <div className="min-h-screen bg-transparent text-white">
@@ -119,8 +120,7 @@ export const SkillTree = React.memo(() => {
             <AnimatePresence mode="popLayout">
               {filteredPerks.map((perk, idx) => {
               const isUnlocked = userPerks.includes(perk.id);
-              const canAfford = skillPoints >= perk.cost;
-              const meetsReqs = perk.requirements.every(req => (userProfile?.stats as any)[req.stat] >= req.min);
+              const meetsReqs = perk.requirements.every(req => getStatValue(req.stat) >= req.min);
               const isLocked = !isUnlocked && !meetsReqs;
 
               return (
@@ -167,7 +167,7 @@ export const SkillTree = React.memo(() => {
                   <div className="flex flex-wrap gap-2 relative z-10">
                     {perk.requirements.map(req => (
                       <span key={req.stat} className={`px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${
-                        (userProfile?.stats as any)[req.stat] >= req.min 
+                        getStatValue(req.stat) >= req.min
                           ? 'border-emerald-500/20 text-emerald-500 bg-emerald-500/5' 
                           : 'border-red-500/20 text-red-500 bg-red-500/5'
                       }`}>
@@ -230,7 +230,7 @@ export const SkillTree = React.memo(() => {
                   {!userPerks.includes(selectedPerk.id) ? (
                     <button
                       onClick={() => handlePurchase(selectedPerk)}
-                      disabled={isPurchasing || skillPoints < selectedPerk.cost || !selectedPerk.requirements.every(req => (userProfile?.stats as any)[req.stat] >= req.min)}
+                      disabled={isPurchasing || skillPoints < selectedPerk.cost || !selectedPerk.requirements.every(req => getStatValue(req.stat) >= req.min)}
                       className="w-full py-4 2xl:py-5 bg-gradient-to-r from-brand-primary to-brand-secondary text-white font-black rounded-2xl 2xl:rounded-3xl uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-30 disabled:hover:scale-100 shadow-xl shadow-brand-primary/20 text-xs 2xl:text-sm"
                     >
                       {isPurchasing ? 'ПОКУПКА...' : 'РАЗБЛОКИРОВАТЬ'}

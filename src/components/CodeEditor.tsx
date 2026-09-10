@@ -15,6 +15,49 @@ function debounce(fn: Function, ms: number) {
   };
 }
 
+let pyodideLoadPromise: Promise<any> | null = null;
+
+const loadPyodideRuntime = (): Promise<any> => {
+  const win = window as any;
+  if (win.pyodide) return Promise.resolve(win.pyodide);
+  if (pyodideLoadPromise) return pyodideLoadPromise;
+
+  pyodideLoadPromise = new Promise((resolve, reject) => {
+    const initialize = async () => {
+      try {
+        const py = await win.loadPyodide({
+          indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
+        });
+        win.pyodide = py;
+        resolve(py);
+      } catch (error) {
+        pyodideLoadPromise = null;
+        reject(error);
+      }
+    };
+
+    if (win.loadPyodide) {
+      void initialize();
+      return;
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>('script[data-pyodide-runtime]');
+    const script = existingScript || document.createElement('script');
+    if (!existingScript) {
+      script.dataset.pyodideRuntime = 'true';
+      script.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
+      document.body.appendChild(script);
+    }
+    script.addEventListener('load', () => { void initialize(); }, { once: true });
+    script.addEventListener('error', () => {
+      pyodideLoadPromise = null;
+      reject(new Error('Не удалось загрузить среду Python. Проверьте подключение к интернету.'));
+    }, { once: true });
+  });
+
+  return pyodideLoadPromise;
+};
+
 interface CodeEditorProps {
   initialCode: string;
   testCases?: (TestCase & { inputValues?: string[] })[];
@@ -40,6 +83,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = React.memo(({
   const [output, setOutput] = useState<string>('');
   const [isRunning, setIsRunning] = useState(false);
   const [pyodide, setPyodide] = useState<any>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<{ passed: boolean; message: string }[] | null>(null);
   const [isVisualizerOpen, setIsVisualizerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'console' | 'tests' | 'history'>('console');
@@ -202,31 +246,13 @@ exec(_user_code, {"__name__": "__main__", "__builtins__": builtins})
   }, [propLessonId, testCases, getSubmissions]);
 
   useEffect(() => {
-    const loadPyodide = async () => {
-      try {
-        if (!(window as any).loadPyodide) {
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
-          script.onload = async () => {
-            const py = await (window as any).loadPyodide({
-              indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
-            });
-            (window as any).pyodide = py;
-            setPyodide(py);
-          };
-          document.body.appendChild(script);
-        } else {
-          const py = await (window as any).loadPyodide({
-            indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
-          });
-          (window as any).pyodide = py;
-          setPyodide(py);
-        }
-      } catch (err) {
-        console.error('Failed to load Pyodide', err);
-      }
-    };
-    loadPyodide();
+    let active = true;
+    void loadPyodideRuntime()
+      .then((py) => { if (active) setPyodide(py); })
+      .catch((error: unknown) => {
+        if (active) setRuntimeError(error instanceof Error ? error.message : 'Не удалось загрузить среду Python.');
+      });
+    return () => { active = false; };
   }, []);
 
   const runTests = React.useCallback(async () => {
@@ -255,6 +281,9 @@ exec(_user_code, {"__name__": "__main__", "__builtins__": builtins})
       for (let i = 0; i < testCases.length; i++) {
         const test = testCases[i];
         try {
+          // Tests must not share variables, mocked input, or stdout with a
+          // previous test run; otherwise a passing result can be accidental.
+          await pyodide.runPythonAsync('globals().clear()');
           
           const inputValuesList = test.inputValues ? JSON.stringify(test.inputValues) : '[]';
           await pyodide.runPythonAsync(`
@@ -415,6 +444,7 @@ builtins.input = MockInput(${inputValuesList})
               <span>{isRunning ? '...' : (testCases.length > 0 ? 'Проверить' : 'Запустить')}</span>
             </button>
           </div>
+          {runtimeError && <p className="px-4 pb-2 text-xs text-red-400">{runtimeError}</p>}
         </div>
         <div className="h-[400px] md:h-[500px] relative z-0 bg-[#1e1e1e]">
           <Editor
@@ -629,12 +659,6 @@ builtins.input = MockInput(${inputValuesList})
           </AnimatePresence>
         </div>
       </div>
-
-      <CodeVisualizer
-        code={code}
-        isOpen={isVisualizerOpen}
-        onClose={() => setIsVisualizerOpen(false)}
-      />
     </div>
   );
 });
