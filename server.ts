@@ -145,8 +145,12 @@ const getDailyChallengeDate = (): string => {
 
 const createFirebaseAdminApp = (): FirebaseAdminApp | null => {
   const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
-  if (!rawServiceAccount) return null;
+  if (!rawServiceAccount) {
+    console.error("[FIREBASE] FIREBASE_SERVICE_ACCOUNT_JSON is not set or empty");
+    return null;
+  }
   try {
+    console.log("[FIREBASE] Parsing FIREBASE_SERVICE_ACCOUNT_JSON, length:", rawServiceAccount.length);
     const serviceAccount: unknown = JSON.parse(rawServiceAccount);
     if (typeof serviceAccount !== "object" || serviceAccount === null) {
       throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is invalid");
@@ -155,8 +159,13 @@ const createFirebaseAdminApp = (): FirebaseAdminApp | null => {
     if (typeof candidate.project_id !== "string" ||
       typeof candidate.client_email !== "string" ||
       typeof candidate.private_key !== "string") {
+      console.error("[FIREBASE] Missing fields:", Object.keys(candidate));
       throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is missing required fields");
     }
+    console.log("[FIREBASE] Service account OK, project_id:", candidate.project_id);
+    console.log("[FIREBASE] private_key starts with:", String(candidate.private_key).substring(0, 30));
+    console.log("[FIREBASE] private_key contains \\\\n:", String(candidate.private_key).includes("\\n"));
+    console.log("[FIREBASE] private_key contains newline:", String(candidate.private_key).includes("\n"));
     return getApps()[0] || initializeApp({
       credential: cert({
         projectId: candidate.project_id,
@@ -165,7 +174,8 @@ const createFirebaseAdminApp = (): FirebaseAdminApp | null => {
       }),
     });
   } catch (error) {
-    console.error("Firebase Admin is unavailable:", error instanceof Error ? error.message : "invalid configuration");
+    console.error("[FIREBASE] Firebase Admin is unavailable:", error instanceof Error ? error.message : "invalid configuration");
+    console.error("[FIREBASE] Full error:", error);
     return null;
   }
 };
@@ -871,6 +881,7 @@ export async function createServerApp() {
   app.post("/api/rewards/daily", requireAuth, rateLimit("daily-reward", 5, 60_000), async (req, res) => {
     const identity = (req as AuthenticatedRequest).identity;
     if (!identity || !firebaseAdminDb) {
+      console.error("[DAILY] Service unavailable. identity:", !!identity, "firebaseAdminDb:", !!firebaseAdminDb);
       res.status(503).json({ error: "Trusted rewards service is not configured" });
       return;
     }

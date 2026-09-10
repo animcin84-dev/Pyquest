@@ -802,9 +802,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     } catch (error) {
       playSound('error');
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[claimDailyReward] Error:', msg);
       toast.error(error instanceof Error && error.message === 'Daily reward has already been claimed'
         ? 'Награда уже получена. Возвращайтесь через 24 часа!'
-        : 'Не удалось получить ежедневную награду.');
+        : `Ошибка награды: ${msg}`);
       return false;
     }
   }, [currentUser, userProfile, canClaimReward]);
