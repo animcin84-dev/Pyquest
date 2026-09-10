@@ -1,15 +1,15 @@
 {
   "framework": "vite",
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && node scripts/build-api.mjs",
   "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index"
+      "destination": "/api/handler.mjs"
     }
   ],
   "functions": {
-    "api/index.ts": {
+    "api/handler.mjs": {
       "maxDuration": 60
     }
   }
