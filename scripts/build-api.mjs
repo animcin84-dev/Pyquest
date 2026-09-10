@@ -1,6 +1,5 @@
 import { build } from 'esbuild';
 
-// Create a plugin to stub out vite (only used in dev mode, not on Vercel)
 const stubVitePlugin = {
   name: 'stub-vite',
   setup(build) {
@@ -23,6 +22,12 @@ await build({
   outfile: 'api/_server.cjs',
   loader: { '.json': 'json' },
   plugins: [stubVitePlugin],
+  banner: {
+    js: `var __import_meta_url = typeof document === 'undefined' ? require('url').pathToFileURL(__filename).href : (document.currentScript && document.currentScript.src || new URL('api/_server.cjs', document.baseURI).href);`,
+  },
+  define: {
+    'import.meta.url': '__import_meta_url',
+  },
 });
 
 console.log('Server bundle built: api/_server.cjs');

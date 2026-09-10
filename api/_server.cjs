@@ -1,3 +1,4 @@
+var __import_meta_url = typeof document === 'undefined' ? require('url').pathToFileURL(__filename).href : (document.currentScript && document.currentScript.src || new URL('api/_server.cjs', document.baseURI).href);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -184135,7 +184136,6 @@ function createServer() {
 
 // server.ts
 var import_path = __toESM(require("path"), 1);
-var import_url = require("url");
 var import_crypto = require("crypto");
 
 // node_modules/@google/generative-ai/dist/index.mjs
@@ -194232,7 +194232,6 @@ var PERKS = [
 })();
 
 // server.ts
-var import_meta = {};
 var signingKeyCache = null;
 var rateLimitBuckets = /* @__PURE__ */ new Map();
 var firebaseProjectId = process.env.FIREBASE_PROJECT_ID || firebase_applet_config_default.projectId;
@@ -194473,8 +194472,6 @@ var parseMentorMessages = (value) => {
   });
   return messages.every((message2) => message2 !== null) ? messages : null;
 };
-var __filename = (0, import_url.fileURLToPath)(import_meta.url);
-var __dirname2 = import_path.default.dirname(__filename);
 async function createServerApp() {
   const app = (0, import_express.default)();
   const httpServer = (0, import_http.createServer)(app);

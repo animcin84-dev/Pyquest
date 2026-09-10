@@ -341,9 +341,6 @@ const parseMentorMessages = (value: unknown): MentorChatMessage[] | null => {
     : null;
 };
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 export async function createServerApp() {
   const app = express();
   const httpServer = createServer(app);
