@@ -1,13 +1,13 @@
 // @ts-nocheck
 // The actual server code lives in server.ts at the project root.
-// During build, scripts/build-api.mjs bundles it into api/_server.cjs.
-// api/package.json has "type": "commonjs" so require() works here.
+// During build, scripts/build-api.mjs copies it to api/_server.ts.
+// Files starting with _ are ignored by Vercel's auto-detection.
 
-const { createServerApp } = require("./_server.cjs");
+import { createServerApp } from "./_server";
 
-const appPromise = createServerApp().then((r: any) => r.app);
+const appPromise = createServerApp().then(({ app }) => app);
 
-export default async function handler(request: any, response: any) {
+export default async function handler(request: unknown, response: unknown) {
   const app = await appPromise;
-  return app(request, response);
+  return app(request as never, response as never);
 }
