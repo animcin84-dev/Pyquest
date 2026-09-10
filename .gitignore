@@ -9,4 +9,4 @@ coverage/
 .vercel
 api/handler.js
 api/handler.mjs
-api/server.js
+api/server.cjs

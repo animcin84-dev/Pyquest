@@ -5,8 +5,8 @@ await build({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  outfile: 'api/server.js',
+  outfile: 'api/server.cjs',
   loader: { '.json': 'json' },
 });
 
-console.log('API handler built: api/server.js');
+console.log('API handler built: api/server.cjs');

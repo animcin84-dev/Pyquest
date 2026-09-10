@@ -5,11 +5,11 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/server"
+      "destination": "/api/server.cjs"
     }
   ],
   "functions": {
-    "api/server.js": {
+    "api/server.cjs": {
       "maxDuration": 60
     }
   }
