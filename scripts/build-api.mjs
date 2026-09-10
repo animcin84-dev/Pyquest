@@ -1,7 +1,12 @@
-import { cpSync } from 'fs';
+import { build } from 'esbuild';
 
-// Copy server.ts into api/ so Vercel's ncc bundler can resolve the import.
-// Files starting with _ are ignored by Vercel's auto-detection.
-cpSync('server.ts', 'api/_server.ts');
+await build({
+  entryPoints: ['server.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outfile: 'api/_server.cjs',
+  loader: { '.json': 'json' },
+});
 
-console.log('Copied server.ts -> api/_server.ts');
+console.log('Server bundle built: api/_server.cjs');

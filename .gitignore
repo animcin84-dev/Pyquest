@@ -7,4 +7,3 @@ coverage/
 .env*
 !.env.example
 .vercel
-api/_server.ts

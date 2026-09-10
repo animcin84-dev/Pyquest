@@ -1,13 +1,13 @@
 // @ts-nocheck
-// The actual server code lives in server.ts at the project root.
-// During build, scripts/build-api.mjs copies it to api/_server.ts.
-// Files starting with _ are ignored by Vercel's auto-detection.
+// api/_server.cjs is pre-built by scripts/build-api.mjs from server.ts.
+// We use dynamic import() to load the CJS bundle from ESM scope.
 
-import { createServerApp } from "./_server";
+const mod = await import("./_server.cjs");
+const createServerApp = mod.createServerApp;
 
-const appPromise = createServerApp().then(({ app }) => app);
+const appPromise = createServerApp().then((r: any) => r.app);
 
-export default async function handler(request: unknown, response: unknown) {
+export default async function handler(request: any, response: any) {
   const app = await appPromise;
-  return app(request as never, response as never);
+  return app(request, response);
 }
