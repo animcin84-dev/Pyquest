@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PyQuest styleframes</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;background:#111;color:#fff;font-family:Inter,Arial,sans-serif}.frame{position:relative;width:1920px;height:1080px;overflow:hidden;background:#050505}.frame+.frame{margin-top:32px}.mesh{position:absolute;inset:0;background:radial-gradient(circle at 72% 34%,rgba(139,92,246,.24),transparent 28%),radial-gradient(circle at 20% 78%,rgba(59,130,246,.14),transparent 30%),linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:auto,auto,48px 48px,48px 48px}.noise{position:absolute;inset:0;opacity:.055;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E")}.eyebrow{font:700 18px/1 JetBrains Mono,monospace;letter-spacing:.2em;text-transform:uppercase;color:#9d86f7}.title{font:800 92px/.98 Outfit,Inter,sans-serif;letter-spacing:-.055em}.sub{font:500 29px/1.35 Inter,sans-serif;color:#a8a8b4}.card{border:1px solid rgba(255,255,255,.12);background:linear-gradient(145deg,rgba(20,19,28,.92),rgba(8,8,12,.9));box-shadow:0 40px 110px rgba(0,0,0,.55),0 0 80px rgba(139,92,246,.1);border-radius:30px}.screen{position:absolute;overflow:hidden}.screen img{width:100%;height:100%;object-fit:cover}.cap{position:absolute;left:50%;bottom:52px;transform:translateX(-50%);padding:15px 30px;border-radius:14px;background:rgba(4,4,7,.84);border:1px solid rgba(255,255,255,.08);font-size:31px;font-weight:650;text-align:center;max-width:1420px}.tag{display:inline-flex;align-items:center;gap:10px;padding:11px 16px;border-radius:999px;border:1px solid rgba(139,92,246,.35);background:rgba(139,92,246,.09);font:650 18px JetBrains Mono,monospace;color:#c6b9ff}.dot{width:8px;height:8px;border-radius:50%;background:#8b5cf6;box-shadow:0 0 18px #8b5cf6}
+  </style>
+</head>
+<body>
+  <section class="frame" id="hook">
+    <div class="mesh"></div>
+    <div style="position:absolute;left:128px;top:120px;width:850px"><div class="eyebrow">PYQUEST / LEVEL 01</div><div class="title" style="margin-top:28px">НЕ УЧЕБНИК.<br><span style="color:#9d79ff">НОВЫЙ УРОВЕНЬ.</span></div><div class="sub" style="margin-top:34px;width:680px">Python как последовательность достижимых игровых шагов.</div></div>
+    <div class="card" style="position:absolute;right:140px;top:164px;width:590px;height:690px;transform:rotateY(-9deg) rotateX(3deg);padding:38px"><div class="tag"><span class="dot"></span> НАВЫК ОТКРЫТ</div><div style="margin-top:94px;font:800 184px/.8 Outfit;color:#fff">01</div><div style="margin-top:38px;font:750 42px Outfit">VARIABLES</div><div style="height:9px;border-radius:9px;background:#191724;margin-top:78px"><div style="width:72%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#8b5cf6,#3b82f6);box-shadow:0 0 26px rgba(139,92,246,.5)"></div></div><div style="margin-top:18px;color:#858593;font:600 17px JetBrains Mono">720 / 1000 XP</div></div>
+    <div class="cap">Представьте, что Python можно учить не как учебник…</div><div class="noise"></div>
+  </section>
+  <section class="frame" id="core">
+    <div class="mesh"></div><div style="position:absolute;left:120px;top:76px"><div class="eyebrow">REAL PRODUCT / CORE LOOP</div><div class="title" style="font-size:64px;margin-top:18px">НАПИСАЛ → ЗАПУСТИЛ → ПОНЯЛ</div></div>
+    <div class="screen card" style="left:160px;top:250px;width:1140px;height:642px;transform:perspective(1200px) rotateY(5deg) rotateX(2deg)"><img src="../public/captures/memory-visualizer.jpg" alt="Real PyQuest memory visualizer"></div>
+    <div class="card" style="position:absolute;right:118px;top:316px;width:500px;padding:34px"><div class="tag"><span class="dot" style="background:#34d399"></span> TESTS PASSED</div><pre style="margin:36px 0 0;color:#dad7e7;font:600 21px/1.65 JetBrains Mono,monospace">x = 10
+y = x + 5
+print(y)
+
+<span style="color:#34d399">✓ output: 15</span></pre><div style="height:1px;background:rgba(255,255,255,.08);margin:28px 0"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font:600 16px JetBrains Mono"><div style="padding:16px;border-radius:12px;background:#11101a">line <b style="color:#9d79ff">02</b></div><div style="padding:16px;border-radius:12px;background:#11101a">x <b style="color:#60a5fa">10</b></div></div></div>
+    <div class="cap">По шагам видно, как выполняется программа и меняются переменные.</div><div class="noise"></div>
+  </section>
+  <section class="frame" id="architecture">
+    <div class="mesh"></div><div style="position:absolute;left:120px;top:82px"><div class="eyebrow">WORKING PROTOTYPE / STACK</div><div class="title" style="font-size:72px;margin-top:20px">ОДИН УЧЕБНЫЙ ЦИКЛ.<br><span style="color:#9d79ff">ЧЕТЫРЕ РАБОЧИХ СЛОЯ.</span></div></div>
+    <svg width="1920" height="1080" style="position:absolute;inset:0"><defs><linearGradient id="g"><stop stop-color="#8b5cf6"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs><g fill="none" stroke="url(#g)" stroke-width="5" opacity=".78"><path d="M960 555 C740 555 720 770 480 770"/><path d="M960 555 C820 555 810 850 760 850"/><path d="M960 555 C1100 555 1110 850 1160 850"/><path d="M960 555 C1180 555 1200 770 1440 770"/></g></svg>
+    <div class="card" style="position:absolute;left:700px;top:390px;width:520px;height:330px;display:grid;place-items:center;text-align:center;border-color:rgba(139,92,246,.5)"><div><div style="font:900 96px Outfit;color:#9d79ff">PQ</div><div style="font:800 34px Outfit">PYQUEST RUNTIME</div><div style="font:600 16px JetBrains Mono;color:#888696;margin-top:12px">LEARN • RUN • TRACE • PROGRESS</div></div></div>
+    <div style="position:absolute;left:290px;top:720px" class="tag">PYODIDE / PYTHON</div><div style="position:absolute;left:620px;top:820px" class="tag">FIREBASE</div><div style="position:absolute;left:1060px;top:820px" class="tag">GEMINI API</div><div style="position:absolute;left:1380px;top:720px" class="tag">SOCKET.IO</div>
+    <div class="cap">Это уже не идея на слайде, а прототип, который мы создали.</div><div class="noise"></div>
+  </section>
+</body>
+</html>

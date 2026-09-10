@@ -1,0 +1,29 @@
+{
+  "source": "/home/anim/2026-08-31 21-11-36.mp4",
+  "fps": 30,
+  "targetDurationSeconds": 104.2,
+  "policy": "Sentence-boundary removals only; original performance remains the sole dialogue source.",
+  "keeps": [
+    {"id":"K01","sourceIn":0.00,"sourceOut":8.12,"editIn":0.00,"editOut":8.12,"purpose":"hook"},
+    {"id":"K02","sourceIn":11.82,"sourceOut":15.47,"editIn":8.12,"editOut":11.77,"purpose":"information abundance"},
+    {"id":"K03","sourceIn":20.69,"sourceOut":28.48,"editIn":11.77,"editOut":19.56,"purpose":"copy-run-error-stuck problem"},
+    {"id":"K04","sourceIn":29.26,"sourceOut":33.36,"editIn":19.56,"editOut":23.66,"purpose":"target audience"},
+    {"id":"K05","sourceIn":40.67,"sourceOut":51.45,"editIn":23.66,"editOut":34.44,"purpose":"product reveal and browser code"},
+    {"id":"K06","sourceIn":55.75,"sourceOut":64.59,"editIn":34.44,"editOut":43.28,"purpose":"run tests and trace"},
+    {"id":"K07","sourceIn":65.67,"sourceOut":78.00,"editIn":43.28,"editOut":55.61,"purpose":"AI Mentor"},
+    {"id":"K08","sourceIn":91.94,"sourceOut":106.00,"editIn":55.61,"editOut":69.67,"purpose":"gamification"},
+    {"id":"K09","sourceIn":111.54,"sourceOut":130.10,"editIn":69.67,"editOut":88.23,"purpose":"working prototype and stack"},
+    {"id":"K10","sourceIn":131.30,"sourceOut":147.27,"editIn":88.23,"editOut":104.20,"purpose":"emotional close"}
+  ],
+  "removals": [
+    {"sourceIn":8.12,"sourceOut":11.82,"reason":"defer brand reveal and save time"},
+    {"sourceIn":15.47,"sourceOut":20.69,"reason":"compress repeated problem setup"},
+    {"sourceIn":28.48,"sourceOut":29.26,"reason":"breath"},
+    {"sourceIn":33.36,"sourceOut":40.67,"reason":"redundant not-another-course phrasing"},
+    {"sourceIn":51.45,"sourceOut":55.75,"reason":"device aside"},
+    {"sourceIn":64.59,"sourceOut":65.67,"reason":"breath"},
+    {"sourceIn":78.00,"sourceOut":91.94,"reason":"secondary AI-practice line and verbal restart"},
+    {"sourceIn":106.00,"sourceOut":111.54,"reason":"unclear ranking phrase"},
+    {"sourceIn":130.10,"sourceOut":131.30,"reason":"silence"}
+  ]
+}

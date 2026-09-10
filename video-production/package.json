@@ -1,0 +1,20 @@
+{
+  "name": "pyquest-pitch-film",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render:benchmark": "remotion render src/index.ts PitchBenchmark out/benchmark_20s.mp4 --codec=h264 --crf=18 --audio-bitrate=192k --pixel-format=yuv420p",
+    "render:final": "remotion render src/index.ts PyQuestPitch out/final_pitch_1080p.mp4 --codec=h264 --crf=17 --audio-bitrate=192k --pixel-format=yuv420p",
+    "render:master": "remotion render src/index.ts PyQuestPitch out/final_pitch_master.mp4 --codec=h264 --crf=10 --audio-bitrate=320k --pixel-format=yuv420p",
+    "still": "remotion still src/index.ts PyQuestPitch"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.413",
+    "@remotion/media": "4.0.413",
+    "@remotion/transitions": "4.0.413",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "remotion": "4.0.413"
+  }
+}

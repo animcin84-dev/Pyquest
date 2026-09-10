@@ -1,0 +1,18 @@
+{
+  "title": "PyQuest — competition pitch",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "durationSeconds": 104.2,
+  "energyArc": "curiosity → friction → reveal → proof → guidance → payoff → credibility → resolve",
+  "scenes": [
+    {"id":"S01","name":"A game, not a textbook","in":0.00,"out":8.12,"frames":[0,244],"visual":"Full speaker plus textbook primitive morphing into a level card","shotCard":"morph-from-primitive","energy":"medium","proof":"speaker claim"},
+    {"id":"S02","name":"The error wall","in":8.12,"out":19.56,"frames":[244,587],"visual":"Theory → copy → run → error path; speaker window; carried line breaks then continues","shotCard":"line-carry-transition","energy":"medium-high","proof":"universal learner problem"},
+    {"id":"S03","name":"Meet PyQuest","in":19.56,"out":34.44,"frames":[587,1033],"visual":"Brand reveal into real Pathways and lesson UI","shotCard":"graze-face-tour","energy":"high","proof":"real capture"},
+    {"id":"S04","name":"Run, test, understand","in":34.44,"out":43.28,"frames":[1033,1298],"visual":"Real lesson/memory UI plus deterministic editor/test/trace callouts","shotCard":"graze-face-tour continuation","energy":"high then hold","proof":"source-verified Pyodide test and trace implementation"},
+    {"id":"S05","name":"AI Mentor","in":43.28,"out":55.61,"frames":[1298,1668],"visual":"Speaker window beside a mentor response that gives staged hints, never a finished solution","shotCard":"ai-stream-response","energy":"steady medium-high","proof":"real endpoint/prompt behavior"},
+    {"id":"S06","name":"Progress becomes play","in":55.61,"out":69.67,"frames":[1668,2090],"visual":"XP, coins, achievements, daily quest, Arcade and Boss cards deal into a progression board","shotCard":"deck-deal-flyin","energy":"peak","proof":"real UI/features without metrics"},
+    {"id":"S07","name":"Already a working prototype","in":69.67,"out":88.23,"frames":[2090,2647],"visual":"Product panel flips into a four-node architecture map; all connectors arrive together","shotCard":"integration-hub-map","energy":"technical confidence","proof":"verified stack"},
+    {"id":"S08","name":"Next level","in":88.23,"out":104.20,"frames":[2647,3126],"visual":"Full speaker; hard phrase contrast; UI card flips to PyQuest monogram and wordmark","shotCard":"ui-to-brand-morph / icon-flip-bloom","energy":"emotional peak then 1s hold","proof":"founder goal"}
+  ]
+}

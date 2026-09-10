@@ -1,0 +1,21 @@
+{
+  "project": "PyQuest competition pitch",
+  "resolution": "1920x1080",
+  "fps": 30,
+  "durationSeconds": 104.3,
+  "language": "ru",
+  "files": [
+    "out/final_pitch_1080p.mp4",
+    "out/final_pitch_master.mp4",
+    "out/final_pitch_nobgm.mp4",
+    "out/thumbnail.jpg",
+    "transcript/final_pitch.srt",
+    "scene-plan.json",
+    "analysis/edit-map.json",
+    "analysis/PHASE_A_AUDIT.md",
+    "analysis/final-review.md",
+    "DESIGN_SPEC.md",
+    "README_VIDEO.md",
+    "src/index.ts"
+  ]
+}
