@@ -7,4 +7,4 @@ coverage/
 .env*
 !.env.example
 .vercel
-api/handler.mjs
+api/handler.js
