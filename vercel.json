@@ -11,11 +11,7 @@
   "functions": {
     "api/index.ts": {
       "maxDuration": 60,
-      "includeFiles": [
-        "server.ts",
-        "src/**",
-        "firebase-applet-config.json"
-      ]
+      "includeFiles": "server.ts"
     }
   }
 }
