@@ -10,3 +10,4 @@ coverage/
 api/handler.js
 api/handler.mjs
 api/server.cjs
+api/_server.cjs
