@@ -1,4 +1,4 @@
-import { createServerApp } from "../server";
+import { createServerApp } from "../server.ts";
 
 // Vercel invokes this handler for every /api/* request (see vercel.json).
 // Keeping the Express app behind one serverless function lets the local

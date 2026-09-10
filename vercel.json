@@ -10,8 +10,7 @@
   ],
   "functions": {
     "api/index.ts": {
-      "maxDuration": 60,
-      "includeFiles": "server.ts"
+      "maxDuration": 60
     }
   }
 }
